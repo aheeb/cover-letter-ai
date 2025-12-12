@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import os
 import re
 
 from openai import OpenAI
 
 from app.models import GenerateOptions, Language, Length, LetterData
+from app.settings import get_settings
 
 
 class LlmError(RuntimeError):
@@ -185,10 +185,11 @@ def _normalize_recipient_block(value: str) -> str:
 
 
 def generate_letter(*, job_text: str, cv_text: str, options: GenerateOptions) -> LetterData:
-    if not os.getenv("OPENAI_API_KEY"):
+    settings = get_settings()
+    if not settings.openai_api_key:
         raise LlmError("Missing OPENAI_API_KEY.")
 
-    client = OpenAI()
+    client = OpenAI(api_key=settings.openai_api_key, timeout=settings.request_timeout_seconds)
 
     language_hint = "Deutsch (Schweiz)" if options.language == Language.de else "English"
     tone_hint = {
@@ -228,7 +229,7 @@ def generate_letter(*, job_text: str, cv_text: str, options: GenerateOptions) ->
         "- Keine erfundenen Fakten; wenn etwas nicht im CV steht, nicht behaupten.\n"
     )
 
-    model = os.getenv("OPENAI_MODEL") or "gpt-5-mini"
+    model = settings.openai_model or "gpt-5-mini"
     max_completion_tokens = _max_completion_tokens(options)
 
     def call_parse(*, max_tokens: int) -> LetterData:

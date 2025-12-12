@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from copy import deepcopy
 from io import BytesIO
 from pathlib import Path
@@ -17,7 +16,13 @@ class TemplateNotFoundError(RuntimeError):
     pass
 
 
-def render_letter_docx(*, template_path: Path, letter: LetterData, date_line: str) -> bytes:
+def render_letter_docx(
+    *,
+    template_path: Path,
+    letter: LetterData,
+    date_line: str,
+    recipient_indent_cm: float | None = None,
+) -> bytes:
     if not template_path.exists():
         raise TemplateNotFoundError(f"Template not found: {template_path}")
 
@@ -53,20 +58,22 @@ def render_letter_docx(*, template_path: Path, letter: LetterData, date_line: st
     # Post-process: ensure recipient address block is consistently left-aligned, but positioned
     # on the right side of the page (common Swiss letter layout). This avoids template tweaks.
     doc = Document(rendered)
-    _format_recipient_block(doc, recipient_lines, date_line)
+    _format_recipient_block(doc, recipient_lines, date_line, recipient_indent_cm)
 
     final = BytesIO()
     doc.save(final)
     return final.getvalue()
 
 
-def _format_recipient_block(doc: Document, recipient_lines: list[str], date_line: str) -> None:
+def _format_recipient_block(
+    doc: Document, recipient_lines: list[str], date_line: str, recipient_indent_cm: float | None
+) -> None:
     if not recipient_lines:
         return
 
     paragraphs = list(_iter_all_paragraphs(doc))
     date_paragraph = _find_date_paragraph(paragraphs, date_line)
-    indent = _recipient_block_indent(doc, date_paragraph)
+    indent = _recipient_block_indent(doc, date_paragraph, recipient_indent_cm)
 
     block = _find_paragraph_block(paragraphs, recipient_lines)
     if not _block_covers_all_recipient_lines(block, recipient_lines):
@@ -123,18 +130,14 @@ def _format_recipient_block(doc: Document, recipient_lines: list[str], date_line
         p.paragraph_format.line_spacing = 1.0
 
 
-def _recipient_block_indent(doc: Document, date_paragraph) -> Emu | None:
+def _recipient_block_indent(doc: Document, date_paragraph, indent_override_cm: float | None) -> Emu | None:
     """
     Compute a default left indent that pushes the recipient block into the right page area.
 
-    Override with `RECIPIENT_ADDRESS_INDENT_CM` (float, centimeters) if you want to fine-tune.
+    Override with `recipient_indent_cm` (float, centimeters) if you want to fine-tune.
     """
-    raw = os.getenv("RECIPIENT_ADDRESS_INDENT_CM")
-    if raw:
-        try:
-            return Cm(float(raw))  # type: ignore[return-value]
-        except ValueError:
-            pass
+    if indent_override_cm is not None:
+        return Cm(indent_override_cm)
 
     # If date line lives in a positioned container (e.g. table cell), don't add extra indent.
     if date_paragraph is not None and _is_in_table_cell(date_paragraph):

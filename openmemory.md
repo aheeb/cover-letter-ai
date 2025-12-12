@@ -13,6 +13,13 @@ The `.docx` layout is controlled by a fixed **`template.docx` in repo root** (Wo
 - `apps/api`: FastAPI (Pydantic models, service layer), endpoints for generate + health
 - Root: `template.docx` (required), `README.md`
 
+### Backend runtime patterns (FastAPI)
+
+- Centralized settings via `app.settings.Settings` (env-driven): OpenAI keys/model, Firecrawl key, template path, recipient indent override, request timeout seconds, payload limits (CV bytes, job text chars), CORS CSV.
+- Request-scoped logging with request IDs (middleware sets `X-Request-ID`; logs prefixed).
+- Error schema via `ApiError` + exception handlers: `{error:{code,message,request_id,details?}}`; HTTP errors normalized; internal errors return generic message.
+- Timeouts around external calls (Firecrawl, LLM) with 504 mapping; payload validation with 400/413; job_url scheme enforced (http/https).
+
 ## Frontend Design System
 
 - **Stack**: Next.js 15, Tailwind CSS 4, Lucide Icons, Inter font.

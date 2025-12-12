@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.paths import default_template_path
 
 
 class Settings(BaseSettings):
@@ -15,6 +19,22 @@ class Settings(BaseSettings):
     # without requiring JSON parsing.
     api_cors_origins: str | None = Field(default=None)
 
+    # LLM / OpenAI
+    openai_api_key: str | None = Field(default=None)
+    openai_model: str = Field(default="gpt-5-mini")
+
+    # Firecrawl
+    firecrawl_api_key: str | None = Field(default=None)
+
+    # DOCX rendering
+    template_path: str | None = Field(default=None, description="Path to template.docx")
+    recipient_address_indent_cm: float | None = Field(default=None)
+
+    # Safety / robustness
+    request_timeout_seconds: float = Field(default=30.0)
+    max_cv_pdf_bytes: int = Field(default=8_000_000)  # ~8 MB
+    max_job_text_chars: int = Field(default=25_000)
+
     @classmethod
     def from_env(cls) -> "Settings":
         """
@@ -24,6 +44,19 @@ class Settings(BaseSettings):
         """
         # Note: actual parsing into a list happens in `main.py`.
         return cls()
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        raw = self.api_cors_origins
+        if not raw:
+            return []
+        return [part.strip() for part in raw.split(",") if part.strip()]
+
+    @property
+    def template_path_resolved(self) -> Path:
+        if self.template_path:
+            return Path(self.template_path)
+        return default_template_path()
 
 
 @lru_cache(maxsize=1)

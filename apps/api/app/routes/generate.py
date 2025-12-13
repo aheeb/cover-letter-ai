@@ -133,7 +133,7 @@ async def generate(
             raise ApiError(code="missing_firecrawl_api_key", message="Missing FIRECRAWL_API_KEY.", status_code=500)
         service = FirecrawlTextService(api_key=api_key)
         try:
-            async with anyio.fail_after(settings.request_timeout_seconds):
+            with anyio.fail_after(settings.request_timeout_seconds):
                 resolved_job_text = await anyio.to_thread.run_sync(service.scrape_markdown, url)
         except TimeoutError:
             raise ApiError(code="firecrawl_timeout", message="Firecrawl request timed out.", status_code=504)
@@ -148,7 +148,7 @@ async def generate(
     options = GenerateOptions(language=language, tone=tone, length=length, target_role=target_role)
 
     try:
-        async with anyio.fail_after(settings.request_timeout_seconds):
+        with anyio.fail_after(settings.request_timeout_seconds):
             letter = await anyio.to_thread.run_sync(
                 partial(generate_letter, job_text=resolved_job_text, cv_text=cv_text, options=options)
             )

@@ -29,7 +29,7 @@ async def job_preview(job_url: str = Form(...)) -> JobPreview:
 
     service = FirecrawlTextService(api_key=api_key)
     try:
-        async with anyio.fail_after(settings.request_timeout_seconds):
+        with anyio.fail_after(settings.request_timeout_seconds):
             markdown = await anyio.to_thread.run_sync(service.scrape_markdown, url)
     except TimeoutError:
         raise ApiError(code="firecrawl_timeout", message="Firecrawl request timed out.", status_code=504)

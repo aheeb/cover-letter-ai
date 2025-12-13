@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     # without requiring JSON parsing.
     api_cors_origins: str | None = Field(default=None)
 
+    # Optional regex for allowing dynamic origins (e.g. Vercel preview deploy URLs).
+    # Example:
+    # API_CORS_ORIGIN_REGEX=^https://cover-letter-ai-beta(-[a-z0-9-]+)?\.vercel\.app$
+    api_cors_origin_regex: str | None = Field(default=None)
+
     # LLM / OpenAI
     openai_api_key: str | None = Field(default=None)
     openai_model: str = Field(default="gpt-5-mini")
@@ -51,6 +56,14 @@ class Settings(BaseSettings):
         if not raw:
             return []
         return [part.strip() for part in raw.split(",") if part.strip()]
+
+    @property
+    def cors_origin_regex(self) -> str | None:
+        raw = self.api_cors_origin_regex
+        if not raw:
+            return None
+        raw = raw.strip()
+        return raw or None
 
     @property
     def template_path_resolved(self) -> Path:

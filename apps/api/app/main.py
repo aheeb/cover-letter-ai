@@ -28,13 +28,25 @@ def create_app() -> FastAPI:
     # CORS for local dev (e.g. Next.js on :3000)
     settings = get_settings()
     cors_origins = settings.cors_origins_list
+    cors_origin_regex = settings.cors_origin_regex
     # If nothing is configured, default to common local dev origins so the UI works out of the box.
     if not cors_origins:
-        cors_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+        cors_origins = [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            # Vercel production + beta (exact)
+            "https://cover-letter-ai.vercel.app",
+            "https://cover-letter-ai-beta.vercel.app",
+        ]
+
+    # Support Vercel preview deploys (e.g. cover-letter-ai-beta-<hash>.vercel.app)
+    if not cors_origin_regex:
+        cors_origin_regex = r"^https://cover-letter-ai(-beta)?(-[a-z0-9-]+)?\.vercel\.app$"
 
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,
+        allow_origin_regex=cors_origin_regex,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

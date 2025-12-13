@@ -110,6 +110,15 @@ Template placeholders in your current Word template:
 - **Recipient block line breaks inside one paragraph**: Sometimes docxtpl renders the whole recipient block in a single paragraph with line breaks. Then only the first line has the leading tab, and subsequent lines (e.g. PLZ/Ort) start at the left margin. Fix: `apps/api/app/services/docx_render.py` detects this case and rewrites the paragraph to insert a tab after each line break (`\"\\n\\t\"`), preserving the template tab stops.
 - **Recipient vs date horizontal alignment**: The template positions the date line via a specific tab stop (`w:pos` in `<w:tabs>`). For pixel-perfect alignment, `apps/api/app/services/docx_render.py` reads the first tab stop from the date paragraph and uses it as the recipient block indent (twips → EMU), so both start at the exact same x-position.
 
+## Deployment (Railway / Railpack)
+
+- **Service root directory**: `apps/api`
+- **Railway config**: `apps/api/railway.json` (Railpack builder)
+- **Healthcheck**: `GET /healthz`
+- **Key fix**: build + run from a repo-local `venv/` (not `.venv`) because Railpack runtime Python may not see packages installed during build.
+- **Start command**: uses `./venv/bin/python -m uvicorn ... --port "$PORT"` to guarantee the same interpreter/site-packages at runtime.
+
+
 ## Integrations (Doc-first)
 
 Concrete doc references and API usage notes are captured in:

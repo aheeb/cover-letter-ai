@@ -4,12 +4,16 @@ import re
 
 from openai import OpenAI
 
+from app.logging import get_logger
 from app.models import ContactGender, ContactPerson, GenerateOptions, Language, Length, LetterData
 from app.settings import get_settings
 
 
 class LlmError(RuntimeError):
     pass
+
+
+logger = get_logger(__name__)
 
 
 def _max_completion_tokens(options: GenerateOptions) -> int:
@@ -150,12 +154,17 @@ def _best_effort_contact_from_job_text(*, job_text: str, language: Language) -> 
         "ansprech",
         "kontaktperson",
         "bewerbung",
+        "bewerbungsunterlagen",
         "fragen",
         "auskunft",
         "recruit",
         "hiring",
         "talent",
         "hr",
+        "freut sich",
+        "freue mich",
+        "auf deine bewerbung",
+        "auf ihre bewerbung",
     )
     for raw in job_text.splitlines():
         line = _strip_markdown_prefix(raw)
@@ -222,10 +231,19 @@ def _llm_contact_if_verified(
         return None, None
 
     normalized_job = _normalize_for_search(job_text)
-    if _normalize_for_search(surname) not in normalized_job:
-        # As a stronger check, see if the full name appears.
-        if _normalize_for_search(full_name) not in normalized_job:
-            return None, None
+    surname_hit = _normalize_for_search(surname) in normalized_job
+    fullname_hit = _normalize_for_search(full_name) in normalized_job
+
+    logger.info(
+        "LLM contact verification: name=%s gender=%s surname_hit=%s fullname_hit=%s",
+        full_name,
+        contact_person.gender,
+        surname_hit,
+        fullname_hit,
+    )
+
+    if not surname_hit and not fullname_hit:
+        return None, None
 
     honorific = _honorific_from_gender(language, contact_person.gender)
     return honorific, full_name
@@ -276,11 +294,64 @@ def _normalize_salutation_line(value: str) -> str:
     return value.strip().rstrip(",").strip()
 
 
+def _ensure_salutation_comma(value: str) -> str:
+    v = value.strip()
+    if not v.endswith(","):
+        return f"{v},"
+    return v
+
+
+def _lowercase_first_word(value: str) -> str:
+    """
+    Lowercase the first alphabetical character (for the paragraph after the greeting),
+    leaving the rest untouched.
+    """
+    chars = list(value)
+    for i, ch in enumerate(chars):
+        if ch.isalpha():
+            chars[i] = ch.lower()
+            break
+    return "".join(chars)
+
+
+def _contact_line(*, name: str, gender: ContactGender, language: Language, honorific_hint: str | None) -> str | None:
+    name = name.strip()
+    if not name:
+        return None
+    if language == Language.de:
+        # Prefer "Herrn" for address lines in German
+        if honorific_hint == "herr" or gender == ContactGender.male:
+            return f"z. Hd. Herrn {name}"
+        if honorific_hint == "frau" or gender == ContactGender.female:
+            return f"z. Hd. Frau {name}"
+        return f"z. Hd. {name}"
+    # English
+    if honorific_hint in {"Mr", "Ms", "Mrs"}:
+        return f"Attn. {honorific_hint} {name}"
+    return f"Attn. {name}"
+
+
+def _insert_contact_line_into_recipient_block(
+    recipient_block: str, contact_line: str | None
+) -> str:
+    if not contact_line:
+        return recipient_block
+    lines = _split_nonempty_lines(recipient_block)
+    if not lines:
+        return contact_line
+    normalized = {_normalize_salutation_line(ln).casefold() for ln in lines}
+    if _normalize_salutation_line(contact_line).casefold() in normalized:
+        return "\n".join(lines)
+    # Insert after company (first line).
+    new_lines = [lines[0], contact_line, *lines[1:]]
+    return "\n".join(new_lines)
+
+
 def _ensure_salutation_first_paragraph(
     *, body_paragraphs: list[str], salutation: str
 ) -> list[str]:
     body = [p.strip() for p in body_paragraphs if p and p.strip()]
-    salutation = _normalize_salutation_line(salutation)
+    salutation = _ensure_salutation_comma(_normalize_salutation_line(salutation))
     if not salutation:
         return body
     if not body:
@@ -288,32 +359,26 @@ def _ensure_salutation_first_paragraph(
 
     first = body[0].strip()
 
-    # If the first paragraph already starts with a salutation, normalize and ensure it's its own paragraph.
-    if _SALUTATION_RE.match(first):
-        # Split "Sehr geehrte ... , rest" into two paragraphs to match the desired formatting.
-        if "\n" in first:
-            head, tail = first.split("\n", 1)
-            head = _normalize_salutation_line(head)
-            tail = tail.strip()
-            out = [head]
-            if tail:
-                out.append(tail)
-            out.extend(body[1:])
-            return out
-        if "," in first:
-            head, tail = first.split(",", 1)
-            head = _normalize_salutation_line(head)
-            tail = tail.strip()
-            out = [head]
-            if tail:
-                out.append(tail)
-            out.extend(body[1:])
-            return out
-        body[0] = _normalize_salutation_line(first)
-        return body
+    # Always enforce the computed salutation as the first paragraph.
+    # If the model jammed salutation + content into one paragraph, keep the tail as the next paragraph.
+    tail = None
+    if "\n" in first:
+        _, tail = first.split("\n", 1)
+        tail = tail.strip() or None
+    elif "," in first:
+        _, tail = first.split(",", 1)
+        tail = tail.strip() or None
 
-    # Otherwise, prepend the computed salutation.
-    return [salutation, *body]
+    out: list[str] = [salutation]
+    if tail:
+        out.append(tail)
+    out.extend(body[1:])
+
+    # Lowercase the first word of the first body paragraph (if present) per German letter conventions.
+    if len(out) >= 2:
+        out[1] = _lowercase_first_word(out[1])
+
+    return out
 
 
 def _sanitize_letter(letter: LetterData) -> LetterData:
@@ -431,7 +496,7 @@ def generate_letter(*, job_text: str, cv_text: str, options: GenerateOptions) ->
         "- WICHTIG: Wiederhole im Body KEINEN Empfängerblock und keine Adresszeilen.\n"
         "- WICHTIG: Keine Signatur-/Kontaktzeilen im Body (kein Name + Adresse + Telefon + E-Mail).\n"
         "- Keine erfundenen Fakten; wenn etwas nicht im CV steht, nicht behaupten.\n"
-        "- Response-Format: Wenn eine konkrete Ansprechperson im Jobtext erwähnt ist, fülle `contact_person` mit `full_name` (Original-Schreibweise) und `gender` (`female|male|unknown`). Sonst setze `contact_person` auf null.\n"
+        "- Response-Format für Ansprechperson: Wenn der Jobtext irgendwo einen Namen nennt, der als Kontakt/Empfang für die Bewerbung dient (z.B. 'Frau Müller freut sich auf Deine Bewerbung', 'Ihre Kontaktperson: Herr Meier', 'Questions? Call Mr Smith'), fülle `contact_person` mit `full_name` (Original-Schreibweise) und `gender` (`female|male|unknown`). Nur wenn KEIN Name genannt ist, setze `contact_person` auf null.\n"
     )
 
     model = settings.openai_model or "gpt-5-mini"
@@ -456,12 +521,31 @@ def generate_letter(*, job_text: str, cv_text: str, options: GenerateOptions) ->
 
     try:
         letter = _sanitize_letter(call_parse(max_tokens=max_completion_tokens))
+        if letter.contact_person:
+            logger.info(
+                "LLM contact person: %s (%s)",
+                letter.contact_person.full_name,
+                letter.contact_person.gender,
+                extra={
+                    "contact_full_name": letter.contact_person.full_name,
+                    "contact_gender": letter.contact_person.gender,
+                },
+            )
         honorific, name = _contact_from_job_text(
             job_text=job_text, language=options.language, contact_person=letter.contact_person
         )
         salutation = _salutation_from_contact(language=options.language, honorific=honorific, name=name)
         body = _ensure_salutation_first_paragraph(body_paragraphs=letter.body_paragraphs, salutation=salutation)
-        return letter.model_copy(update={"body_paragraphs": body})
+        contact_line = None
+        if name:
+            contact_line = _contact_line(
+                name=name,
+                gender=letter.contact_person.gender if letter.contact_person else ContactGender.unknown,
+                language=options.language,
+                honorific_hint=honorific,
+            )
+        recipient_block = _insert_contact_line_into_recipient_block(letter.recipient_block, contact_line)
+        return letter.model_copy(update={"body_paragraphs": body, "recipient_block": recipient_block})
     except Exception as exc:  # noqa: BLE001
         # If the JSON parse failed due to hitting the length limit, retry once with a bit more headroom.
         msg = str(exc)
@@ -472,7 +556,16 @@ def generate_letter(*, job_text: str, cv_text: str, options: GenerateOptions) ->
             )
             salutation = _salutation_from_contact(language=options.language, honorific=honorific, name=name)
             body = _ensure_salutation_first_paragraph(body_paragraphs=letter.body_paragraphs, salutation=salutation)
-            return letter.model_copy(update={"body_paragraphs": body})
+            contact_line = None
+            if name:
+                contact_line = _contact_line(
+                    name=name,
+                    gender=letter.contact_person.gender if letter.contact_person else ContactGender.unknown,
+                    language=options.language,
+                    honorific_hint=honorific,
+                )
+            recipient_block = _insert_contact_line_into_recipient_block(letter.recipient_block, contact_line)
+            return letter.model_copy(update={"body_paragraphs": body, "recipient_block": recipient_block})
         raise
 
     # Unreachable

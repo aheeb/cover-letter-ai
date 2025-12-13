@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import anyio
-from anyio.exceptions import TimeoutError as AnyioTimeoutError
 from fastapi import APIRouter, Form
+
+# AnyIO v4 removed `anyio.exceptions`. `anyio.fail_after(...)` raises `TimeoutError`,
+# so we catch `TimeoutError` directly (works across AnyIO versions).
 
 from app.errors import ApiError
 from app.logging import get_logger
@@ -29,7 +31,7 @@ async def job_preview(job_url: str = Form(...)) -> JobPreview:
     try:
         async with anyio.fail_after(settings.request_timeout_seconds):
             markdown = await anyio.to_thread.run_sync(service.scrape_markdown, url)
-    except AnyioTimeoutError:
+    except TimeoutError:
         raise ApiError(code="firecrawl_timeout", message="Firecrawl request timed out.", status_code=504)
     except FirecrawlError as exc:
         raise ApiError(code="firecrawl_error", message=str(exc), status_code=502)

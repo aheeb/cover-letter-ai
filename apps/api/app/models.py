@@ -29,11 +29,23 @@ class GenerateOptions(BaseModel):
     target_role: str | None = None
 
 
+class ContactGender(str, Enum):
+    female = "female"
+    male = "male"
+    unknown = "unknown"
+
+
+class ContactPerson(BaseModel):
+    full_name: str = Field(min_length=1)
+    gender: ContactGender = ContactGender.unknown
+
+
 class LetterData(BaseModel):
     company: str = Field(min_length=1)
     role_title: str = Field(min_length=1)
     recipient_block: str = Field(min_length=1, description="Recipient address block (company + address if known).")
     body_paragraphs: list[str] = Field(min_length=2)
+    contact_person: ContactPerson | None = None
 
 
 class JobPreview(BaseModel):

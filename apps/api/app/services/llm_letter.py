@@ -4,7 +4,7 @@ import re
 
 from openai import OpenAI
 
-from app.models import GenerateOptions, Language, Length, LetterData
+from app.models import ContactGender, ContactPerson, GenerateOptions, Language, Length, LetterData
 from app.settings import get_settings
 
 
@@ -190,6 +190,58 @@ def _best_effort_contact_from_job_text(*, job_text: str, language: Language) -> 
     return None, None
 
 
+def _honorific_from_gender(language: Language, gender: ContactGender) -> str | None:
+    if language == Language.de:
+        if gender == ContactGender.female:
+            return "frau"
+        if gender == ContactGender.male:
+            return "herr"
+        return None
+    if gender == ContactGender.female:
+        return "Ms"
+    if gender == ContactGender.male:
+        return "Mr"
+    return None
+
+
+def _normalize_for_search(value: str) -> str:
+    return value.casefold()
+
+
+def _llm_contact_if_verified(
+    *, job_text: str, language: Language, contact_person: ContactPerson | None
+) -> tuple[str | None, str | None]:
+    if not contact_person:
+        return None, None
+    full_name = contact_person.full_name.strip()
+    if not full_name:
+        return None, None
+
+    surname = _surname(full_name).strip()
+    if not surname:
+        return None, None
+
+    normalized_job = _normalize_for_search(job_text)
+    if _normalize_for_search(surname) not in normalized_job:
+        # As a stronger check, see if the full name appears.
+        if _normalize_for_search(full_name) not in normalized_job:
+            return None, None
+
+    honorific = _honorific_from_gender(language, contact_person.gender)
+    return honorific, full_name
+
+
+def _contact_from_job_text(
+    *, job_text: str, language: Language, contact_person: ContactPerson | None
+) -> tuple[str | None, str | None]:
+    honorific, name = _llm_contact_if_verified(
+        job_text=job_text, language=language, contact_person=contact_person
+    )
+    if honorific or name:
+        return honorific, name
+    return _best_effort_contact_from_job_text(job_text=job_text, language=language)
+
+
 def _surname(name: str) -> str:
     parts = [p for p in name.strip().split() if p]
     return parts[-1] if parts else name.strip()
@@ -282,12 +334,21 @@ def _sanitize_letter(letter: LetterData) -> LetterData:
             if len(cleaned_body) < 2:
                 cleaned_body = [p.strip() for p in letter.body_paragraphs if p and p.strip()]
 
+    contact_person = letter.contact_person
+    if contact_person:
+        contact_person = contact_person.model_copy(
+            update={
+                "full_name": contact_person.full_name.strip(),
+            }
+        )
+
     return letter.model_copy(
         update={
             "company": letter.company.strip(),
             "role_title": letter.role_title.strip(),
             "recipient_block": normalized_recipient_block,
             "body_paragraphs": cleaned_body,
+            "contact_person": contact_person,
         }
     )
 
@@ -370,6 +431,7 @@ def generate_letter(*, job_text: str, cv_text: str, options: GenerateOptions) ->
         "- WICHTIG: Wiederhole im Body KEINEN Empfängerblock und keine Adresszeilen.\n"
         "- WICHTIG: Keine Signatur-/Kontaktzeilen im Body (kein Name + Adresse + Telefon + E-Mail).\n"
         "- Keine erfundenen Fakten; wenn etwas nicht im CV steht, nicht behaupten.\n"
+        "- Response-Format: Wenn eine konkrete Ansprechperson im Jobtext erwähnt ist, fülle `contact_person` mit `full_name` (Original-Schreibweise) und `gender` (`female|male|unknown`). Sonst setze `contact_person` auf null.\n"
     )
 
     model = settings.openai_model or "gpt-5-mini"
@@ -394,7 +456,9 @@ def generate_letter(*, job_text: str, cv_text: str, options: GenerateOptions) ->
 
     try:
         letter = _sanitize_letter(call_parse(max_tokens=max_completion_tokens))
-        honorific, name = _best_effort_contact_from_job_text(job_text=job_text, language=options.language)
+        honorific, name = _contact_from_job_text(
+            job_text=job_text, language=options.language, contact_person=letter.contact_person
+        )
         salutation = _salutation_from_contact(language=options.language, honorific=honorific, name=name)
         body = _ensure_salutation_first_paragraph(body_paragraphs=letter.body_paragraphs, salutation=salutation)
         return letter.model_copy(update={"body_paragraphs": body})
@@ -403,7 +467,9 @@ def generate_letter(*, job_text: str, cv_text: str, options: GenerateOptions) ->
         msg = str(exc)
         if "length limit was reached" in msg or "Could not parse response content" in msg:
             letter = _sanitize_letter(call_parse(max_tokens=max_completion_tokens + 500))
-            honorific, name = _best_effort_contact_from_job_text(job_text=job_text, language=options.language)
+            honorific, name = _contact_from_job_text(
+                job_text=job_text, language=options.language, contact_person=letter.contact_person
+            )
             salutation = _salutation_from_contact(language=options.language, honorific=honorific, name=name)
             body = _ensure_salutation_first_paragraph(body_paragraphs=letter.body_paragraphs, salutation=salutation)
             return letter.model_copy(update={"body_paragraphs": body})

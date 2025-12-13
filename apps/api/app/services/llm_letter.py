@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 import re
 
 from openai import OpenAI
 
 from app.logging import get_logger
 from app.models import ContactGender, ContactPerson, GenerateOptions, Language, Length, LetterData
+from app.services.google_places import GooglePlacesError, GooglePlacesService, create_google_places_service
 from app.settings import get_settings
 
 
@@ -16,15 +18,284 @@ class LlmError(RuntimeError):
 logger = get_logger(__name__)
 
 
+class AddressResolutionResult:
+    """Result of address resolution process."""
+    def __init__(self, source: str, confidence: str, recipient_block: str):
+        self.source = source  # "places" or "fallback"
+        self.confidence = confidence  # "high", "low"
+        self.recipient_block = recipient_block
+
+
+def _extract_company_from_job_text(job_text: str) -> str | None:
+    """
+    Extract company name from job text using simple heuristics.
+    This is used as a fallback when the LLM doesn't identify a clear company.
+    """
+    # Look for common patterns
+    patterns = [
+        r"(?:bei|at|für|for)\s+([A-Z][A-Za-zÄÖÜäöüß0-9&\s]{2,50})(?:\s|$)",
+        r"([A-Z][A-Za-zÄÖÜäöüß0-9&\s]{3,50})\s+(?:sucht|recruiting|hiring|stellenangebot)",
+        r"([A-Z][A-Za-zÄÖÜäöüß0-9&\s]{3,50})\s+(?:AG|GmbH|S\.A\.|Ltd|Inc|Corp)",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, job_text, re.IGNORECASE)
+        if match:
+            company = match.group(1).strip()
+            # Clean up common false positives
+            if len(company) > 3 and not any(word in company.lower() for word in ["wir", "uns", "die", "der", "das"]):
+                return company
+
+    return None
+
+
+def _create_recipient_block_from_places(place_details: dict) -> str:
+    """
+    Create a deterministic recipient block from Google Places details.
+
+    Format: Company Name\nStreet Address\nPostal Code City
+    """
+    lines = []
+
+    # Company name
+    display_name = place_details.get("displayName", {}).get("text", "")
+    if display_name:
+        lines.append(display_name)
+
+    # Address components
+    address_components = place_details.get("addressComponents", [])
+    street_number = ""
+    route = ""
+    postal_code = ""
+    locality = ""
+
+    for component in address_components:
+        types = component.get("types", [])
+        long_text = component.get("longText", "")
+
+        if "street_number" in types:
+            street_number = long_text
+        elif "route" in types:
+            route = long_text
+        elif "postal_code" in types:
+            postal_code = long_text
+        elif "locality" in types or "administrative_area_level_1" in types:
+            locality = long_text
+
+    # Street line
+    if route:
+        street_line = route
+        if street_number:
+            street_line = f"{street_number} {route}"
+        lines.append(street_line)
+
+    # Postal code + city line
+    if postal_code or locality:
+        city_line = f"{postal_code} {locality}".strip()
+        lines.append(city_line)
+
+    # Ensure we have at least the company name
+    if not lines:
+        lines.append(display_name or "Unbekannte Firma")
+
+    return "\n".join(lines)
+
+
+def _normalize_text_for_matching(text: str) -> str:
+    """
+    Normalize text for fuzzy matching by:
+    - Converting to lowercase
+    - Collapsing whitespace
+    - Normalizing German umlauts (ä→ae, ö→oe, ü→ue, ß→ss)
+    - Removing punctuation
+    """
+    if not text:
+        return ""
+
+    # Convert to lowercase
+    text = text.lower()
+
+    # Normalize German umlauts
+    text = text.replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
+
+    # Normalize street abbreviations
+    text = re.sub(r'\bstr\.?\b', 'strasse', text)
+    text = re.sub(r'\bstr\b', 'strasse', text)
+
+    # Remove punctuation and collapse whitespace
+    text = re.sub(r'[^\w\s]', '', text)
+    text = re.sub(r'\s+', ' ', text)
+
+    return text.strip()
+
+
+def _verify_address_part(part: str, verification_text: str) -> bool:
+    """
+    Verify if an address part is supported by the verification text.
+
+    Uses normalized fuzzy matching.
+    """
+    if not part or not verification_text:
+        return False
+
+    normalized_part = _normalize_text_for_matching(part)
+    normalized_text = _normalize_text_for_matching(verification_text)
+
+    # For postal codes, require exact match of 4-5 digit codes
+    if re.match(r'^\d{4,5}$', normalized_part):
+        return normalized_part in normalized_text
+
+    # For other parts, check if the normalized part appears in the text
+    # Allow for some flexibility (e.g., "Bahnhofstrasse" should match "Bahnhofstr")
+    return normalized_part in normalized_text
+
+
+def _prune_recipient_block(recipient_block: str, verification_text: str) -> str:
+    """
+    Prune unverifiable parts from recipient block by verifying against verification text.
+
+    Keeps verified parts and removes unverified ones.
+    """
+    if not recipient_block or not verification_text:
+        return recipient_block
+
+    lines = recipient_block.splitlines()
+    if len(lines) < 2:
+        # If only company name, keep it (we can't verify company names reliably)
+        return recipient_block
+
+    verified_lines = []
+
+    # Always keep the first line (company name) - we assume the LLM got this right
+    verified_lines.append(lines[0])
+
+    # Verify and keep subsequent lines
+    for line in lines[1:]:
+        line = line.strip()
+        if not line:
+            continue
+
+        if _verify_address_part(line, verification_text):
+            verified_lines.append(line)
+            logger.debug("Kept verified address line: %s", line)
+        else:
+            logger.debug("Removed unverified address line: %s", line)
+
+    # If we removed all address lines, add a placeholder
+    if len(verified_lines) == 1:
+        verified_lines.append("Adresse unbekannt")
+
+    return "\n".join(verified_lines)
+
+
+def _assess_places_confidence(search_results: list[dict], place_details: dict | None, job_text: str) -> str:
+    """
+    Assess confidence in Places results based on relevance to job text.
+
+    Returns "high" or "low".
+    """
+    if not search_results or not place_details:
+        return "low"
+
+    # Check if the place details contain address information
+    formatted_address = place_details.get("formattedAddress", "")
+    if not formatted_address:
+        return "low"
+
+    # Extract company name from place details
+    company_name = place_details.get("displayName", {}).get("text", "").lower()
+
+    # Check for company name matches in job text
+    job_text_lower = job_text.lower()
+    if company_name and company_name in job_text_lower:
+        return "high"
+
+    # Check for location matches (city, postal code)
+    address_components = place_details.get("addressComponents", [])
+    cities = []
+    postal_codes = []
+
+    for component in address_components:
+        types = component.get("types", [])
+        long_text = component.get("longText", "").lower()
+
+        if "locality" in types or "administrative_area_level_1" in types:
+            cities.append(long_text)
+        elif "postal_code" in types:
+            postal_codes.append(long_text)
+
+    # Check if any city or postal code from Places appears in job text
+    for city in cities:
+        if city in job_text_lower:
+            return "high"
+
+    for postal in postal_codes:
+        if postal in job_text_lower:
+            return "high"
+
+    # If we have detailed address but no strong matches, still consider it reasonably confident
+    # (better than LLM hallucination)
+    if len(address_components) >= 3:  # street, city, postal code
+        return "high"
+
+    return "low"
+
+
+def _resolve_recipient_address(*, job_text: str, letter_recipient_block: str, places_service: GooglePlacesService | None, is_from_firecrawl: bool) -> AddressResolutionResult:
+    """
+    Resolve recipient address using Places API when possible, fallback to LLM result.
+
+    The LLM has already attempted to use Places tools. We assess if we should trust
+    the Places-derived result or fall back to the LLM's original recipient_block.
+    When falling back, we verify and prune address parts against the job text.
+    """
+    # For now, since the LLM generates the final recipient_block, we assume it used Places
+    # if available. In a future iteration, we could track which path was taken.
+
+    # Simple heuristic: if Places service is available and the recipient block
+    # looks structured (has line breaks), assume Places was used
+    if places_service and "\n" in letter_recipient_block:
+        confidence = "high"  # Assume LLM used Places effectively
+        source = "places"
+        final_recipient_block = letter_recipient_block
+    else:
+        confidence = "low"
+        source = "fallback"
+        # When falling back, verify and prune the LLM-generated recipient block
+        final_recipient_block = _prune_recipient_block(letter_recipient_block, job_text)
+
+        if final_recipient_block != letter_recipient_block:
+            logger.info(
+                "Pruned recipient block in fallback mode",
+                extra={
+                    "original_block": letter_recipient_block,
+                    "pruned_block": final_recipient_block,
+                },
+            )
+
+    return AddressResolutionResult(
+        source=source,
+        confidence=confidence,
+        recipient_block=final_recipient_block
+    )
+
+
 def _max_completion_tokens(options: GenerateOptions) -> int:
     """
     Upper bound for generated tokens (controls response length/cost).
+    
+    When using tool calling, the model needs tokens for:
+    - Reasoning (if using reasoning models)
+    - Tool calls (function_call items)
+    - Final structured output (LetterData with multiple paragraphs)
+    
+    We set higher limits to accommodate all of these.
     """
     if options.length == Length.short:
-        return 450
+        return 800  # Increased from 450 to account for tool calling overhead
     if options.length == Length.medium:
-        return 650
-    return 900
+        return 1200  # Increased from 650 to account for tool calling overhead
+    return 1600  # Increased from 900 to account for tool calling overhead
 
 
 def _split_nonempty_lines(value: str) -> list[str]:
@@ -418,6 +689,84 @@ def _sanitize_letter(letter: LetterData) -> LetterData:
     )
 
 
+def _add_additional_properties_false(schema: dict) -> dict:
+    """Recursively add additionalProperties: false to all object definitions in a JSON schema.
+    
+    OpenAI structured outputs require this for all objects in the schema.
+    Also ensures ALL properties are in the required array (strict mode requirement).
+    Removes invalid keywords (like 'default') from objects that use $ref.
+    
+    This function must process the entire schema including $defs/definitions to ensure
+    all nested objects (even those referenced via $ref) have all properties in required.
+    """
+    if not isinstance(schema, dict):
+        return schema
+    
+    # Create a copy to avoid mutating the original
+    result = schema.copy()
+    
+    # CRITICAL: If this object uses $ref, remove other keywords that are invalid with $ref
+    # According to JSON Schema spec, $ref cannot coexist with other keywords like 'default'
+    # OpenAI's structured outputs API enforces this strictly
+    if "$ref" in result:
+        # Keep only $ref and description (description is allowed with $ref in some contexts)
+        # Remove all other keywords that conflict with $ref
+        allowed_with_ref = {"$ref", "description"}
+        keys_to_remove = [k for k in result.keys() if k not in allowed_with_ref]
+        for key in keys_to_remove:
+            result.pop(key, None)
+        # Don't process further if it's just a $ref
+        return result
+    
+    # FIRST: Process all definitions/$defs recursively to ensure nested objects are fixed
+    # This must happen before processing the root to handle $ref references correctly
+    if "definitions" in result:
+        result["definitions"] = {
+            key: _add_additional_properties_false(value)
+            for key, value in result["definitions"].items()
+        }
+    
+    if "$defs" in result:
+        result["$defs"] = {
+            key: _add_additional_properties_false(value)
+            for key, value in result["$defs"].items()
+        }
+    
+    # If this is an object type, add additionalProperties: false and ensure all properties are required
+    if result.get("type") == "object":
+        result["additionalProperties"] = False
+        
+        # CRITICAL: In strict mode, ALL properties must be in the required array
+        # This is a requirement from OpenAI's structured outputs
+        # Even fields with default values must be in required
+        if "properties" in result:
+            # Get all property keys
+            all_property_keys = list(result["properties"].keys())
+            # Ensure all properties are in required array
+            existing_required = result.get("required", [])
+            # Merge and deduplicate - ALL properties must be in required
+            result["required"] = list(dict.fromkeys(existing_required + all_property_keys))
+    
+    # Recursively process properties (after fixing definitions)
+    if "properties" in result:
+        result["properties"] = {
+            key: _add_additional_properties_false(value)
+            for key, value in result["properties"].items()
+        }
+    
+    # Recursively process items (for arrays)
+    if "items" in result:
+        result["items"] = _add_additional_properties_false(result["items"])
+    
+    # Recursively process anyOf, oneOf, allOf
+    # These may contain $ref references, so we need to process them
+    for key in ["anyOf", "oneOf", "allOf"]:
+        if key in result:
+            result[key] = [_add_additional_properties_false(item) for item in result[key]]
+    
+    return result
+
+
 def _normalize_recipient_block(value: str) -> str:
     """
     Normalize recipient blocks so they render cleanly in the DOCX template:
@@ -449,12 +798,13 @@ def _normalize_recipient_block(value: str) -> str:
     return "\n".join(deduped).strip()
 
 
-def generate_letter(*, job_text: str, cv_text: str, options: GenerateOptions) -> LetterData:
+def generate_letter(*, job_text: str, cv_text: str, options: GenerateOptions, is_from_firecrawl: bool = False) -> LetterData:
     settings = get_settings()
     if not settings.openai_api_key:
         raise LlmError("Missing OPENAI_API_KEY.")
 
     client = OpenAI(api_key=settings.openai_api_key, timeout=settings.request_timeout_seconds)
+    places_service = create_google_places_service(settings)
 
     language_hint = "Deutsch (Schweiz)" if options.language == Language.de else "English"
     tone_hint = {
@@ -472,6 +822,7 @@ def generate_letter(*, job_text: str, cv_text: str, options: GenerateOptions) ->
 
     dev_prompt = (
         "Du schreibst ein Schweizer Motivationsschreiben (Bewerbungsschreiben). "
+        "Du kannst Google Places APIs verwenden, um korrekte Firmenadressen zu finden. "
         "Gib ausschließlich strukturierte Felder gemäß dem Response-Format zurück. "
         "Keine zusätzlichen Felder, kein Fließtext außerhalb des Schemas.\n\n"
         f"Sprache: {language_hint}\n"
@@ -487,40 +838,299 @@ def generate_letter(*, job_text: str, cv_text: str, options: GenerateOptions) ->
         "LEBENSLAUF (Textauszug):\n"
         f"{cv_text}\n\n"
         "Anforderungen:\n"
-        "- Empfängerblock: 2-3 Zeilen, OHNE Kommata: (1) Firma, (2) Strasse + Nr (falls ableitbar), (3) PLZ Ort (falls ableitbar).\n"
+        "- Empfängerblock: Verwende Google Places API um die korrekte Firmenadresse zu finden. "
+        "  Wenn du die Firma identifizierst, rufe google_places_text_search auf mit dem Firmennamen. "
+        "  Wenn mehrere Resultate zurückkommen, wähle basierend auf dem Job-Text das passendste aus. "
+        "  Verwende dann google_places_place_details um die vollständigen Adressdetails zu bekommen. "
+        "  Erstelle den Empfängerblock aus: (1) Firma, (2) Strasse + Nr, (3) PLZ Ort.\n"
+        "- Wenn Google Places nicht verfügbar ist oder keine guten Resultate liefert, "
+        "  erstelle den Empfängerblock wie bisher aus dem Job-Text (2-3 Zeilen, OHNE Kommata).\n"
         "- Body: Beginne IMMER mit einer eigenen Anrede-Zeile als erstem Absatz.\n"
-        "  - Wenn im Jobtext eine konkrete Ansprechperson genannt ist (z.B. 'Frau Müller' oder 'Herr Meier'), verwende diese korrekt: 'Sehr geehrte Frau Müller' / 'Sehr geehrter Herr Meier'.\n"
+        "  - Wenn im Jobtext eine konkrete Ansprechperson genannt ist (z.B. 'Frau Müller' oder 'Herr Meier'), "
+        "    verwende diese korrekt: 'Sehr geehrte Frau Müller' / 'Sehr geehrter Herr Meier'.\n"
         "  - Wenn keine Ansprechperson explizit genannt ist: 'Sehr geehrte Damen und Herren'.\n"
         "  - Erfinde KEINE Ansprechperson und rate keine Namen.\n"
         "- Danach: 2-4 weitere Absätze mit konkretem Fit auf Aufgaben/Anforderungen, Beispiele aus CV.\n"
         "- WICHTIG: Wiederhole im Body KEINEN Empfängerblock und keine Adresszeilen.\n"
         "- WICHTIG: Keine Signatur-/Kontaktzeilen im Body (kein Name + Adresse + Telefon + E-Mail).\n"
         "- Keine erfundenen Fakten; wenn etwas nicht im CV steht, nicht behaupten.\n"
-        "- Response-Format für Ansprechperson: Wenn der Jobtext irgendwo einen Namen nennt, der als Kontakt/Empfang für die Bewerbung dient (z.B. 'Frau Müller freut sich auf Deine Bewerbung', 'Ihre Kontaktperson: Herr Meier', 'Questions? Call Mr Smith'), fülle `contact_person` mit `full_name` (Original-Schreibweise) und `gender` (`female|male|unknown`). Nur wenn KEIN Name genannt ist, setze `contact_person` auf null.\n"
+        "- Response-Format für Ansprechperson: Wenn der Jobtext irgendwo einen Namen nennt, der als Kontakt/Empfang "
+        "  für die Bewerbung dient (z.B. 'Frau Müller freut sich auf Deine Bewerbung', 'Ihre Kontaktperson: Herr Meier', "
+        "  'Questions? Call Mr Smith'), fülle `contact_person` mit `full_name` (Original-Schreibweise) und "
+        "  `gender` (`female|male|unknown`). Nur wenn KEIN Name genannt ist, setze `contact_person` auf null.\n"
     )
 
     model = settings.openai_model or "gpt-5-mini"
-    max_completion_tokens = _max_completion_tokens(options)
+    # Removed max_completion_tokens limit - let OpenAI use its default (model's context limit)
+    # This prevents "max_output_tokens" incomplete response errors
 
-    def call_parse(*, max_tokens: int) -> LetterData:
-        completion = client.chat.completions.parse(
-            model=model,
-            messages=[
-                {"role": "developer", "content": dev_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            response_format=LetterData,
-            max_completion_tokens=max_tokens,
-            # gpt-5-mini does not support `none` (only gpt-5.1+ supports disabling reasoning).
-            reasoning_effort="minimal",
-        )
-        message = completion.choices[0].message
-        if message.parsed is None:
-            raise LlmError("LLM did not return parsed structured output.")
-        return message.parsed
+    # Tool definitions for Google Places API
+    tools = []
+    if places_service:
+        tools = [
+            {
+                "type": "function",
+                "name": "google_places_text_search",
+                "description": "Suche nach Firmen in Google Places anhand des Firmennamens. Gibt Kandidaten zurück.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Firmenname oder Suchbegriff für die Places-Suche"
+                        },
+                        "region_code": {
+                            "type": ["string", "null"],
+                            "description": "Optionaler Regionscode (z.B. 'CH' für Schweiz)"
+                        }
+                    },
+                    "required": ["query", "region_code"],
+                    "additionalProperties": False
+                },
+                "strict": True
+            },
+            {
+                "type": "function",
+                "name": "google_places_place_details",
+                "description": "Hole detaillierte Informationen zu einem bestimmten Ort anhand der Place ID.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "place_id": {
+                            "type": "string",
+                            "description": "Die Google Places Place ID"
+                        }
+                    },
+                    "required": ["place_id"],
+                    "additionalProperties": False
+                },
+                "strict": True
+            }
+        ]
+
+    # Tool execution functions
+    def execute_google_places_text_search(query: str, region_code: str | None = None) -> str:
+        """Execute Google Places Text Search and return JSON string."""
+        try:
+            max_results = 5  # Limit to avoid too many options for the model
+            results = places_service.text_search(query, max_results=max_results)
+            return json.dumps(results, ensure_ascii=False)
+        except Exception as e:
+            logger.warning(f"Google Places Text Search failed: query={query}, error={str(e)}")
+            return json.dumps({"error": str(e)})
+
+    def execute_google_places_place_details(place_id: str) -> str:
+        """Execute Google Places Place Details and return JSON string."""
+        try:
+            result = places_service.place_details(place_id)
+            return json.dumps(result, ensure_ascii=False)
+        except Exception as e:
+            logger.warning(f"Google Places Place Details failed: place_id={place_id}, error={str(e)}")
+            return json.dumps({"error": str(e)})
+
+    def call_responses_api(input_items: list[dict], apply_structured_output: bool = True) -> LetterData:
+        """Call OpenAI Responses API and handle tool calls.
+        
+        Args:
+            input_items: Input messages for the API
+            apply_structured_output: Whether to apply structured output format (only after tool calls complete)
+        """
+        # Build request parameters
+        request_params = {
+            "model": model,
+            "input": input_items,
+            # max_output_tokens is not set - OpenAI will use its default (model's context limit)
+            # This prevents incomplete responses due to token limits
+        }
+        
+        # Only apply structured outputs when we're sure there are no more tool calls
+        if apply_structured_output:
+            # OpenAI structured outputs require additionalProperties: false on all objects
+            schema = _add_additional_properties_false(LetterData.model_json_schema())
+            request_params["text"] = {"format": {"type": "json_schema", "name": "letter_data", "schema": schema, "strict": True}}
+        
+        # Only include tools and tool_choice if tools are actually available
+        if tools:
+            request_params["tools"] = tools
+            request_params["tool_choice"] = "auto"
+        
+        try:
+            response = client.responses.create(**request_params)
+        except Exception as e:
+            error_msg = str(e)
+            if hasattr(e, 'response') and hasattr(e.response, 'json'):
+                try:
+                    error_data = e.response.json()
+                    error_msg = f"{error_msg} - {error_data}"
+                except Exception:
+                    pass
+            logger.error(f"OpenAI Responses API call failed: {error_msg}")
+            raise LlmError(f"OpenAI API error: {error_msg}") from e
+
+        # Process tool calls
+        # First, add all response output items to input_items (including function_call items)
+        # This is required - the API needs to see the function_call before the function_call_output
+        # According to docs: "input_list += response.output" - but we need to filter out response-only fields
+        # Response-only fields like "status" should NOT be included in input items
+        # CRITICAL: Reasoning items must be followed by a function_call or message - they cannot be standalone
+        output_items = list(response.output)
+        for i, item in enumerate(output_items):
+            # Convert to dict first
+            if hasattr(item, "model_dump"):
+                item_dict = item.model_dump()
+            elif hasattr(item, "dict"):
+                item_dict = item.dict()
+            elif isinstance(item, dict):
+                item_dict = item.copy()
+            else:
+                # Fallback: convert to dict manually
+                item_dict = {"type": getattr(item, "type", None)}
+                for attr in ["id", "call_id", "name", "arguments", "role", "content", "summary"]:
+                    if hasattr(item, attr):
+                        value = getattr(item, attr)
+                        if attr == "content" and isinstance(value, list):
+                            item_dict[attr] = [
+                                (
+                                    sub_item.model_dump()
+                                    if hasattr(sub_item, "model_dump")
+                                    else (sub_item.dict() if hasattr(sub_item, "dict") else sub_item)
+                                    if not isinstance(sub_item, dict)
+                                    else sub_item
+                                )
+                                for sub_item in value
+                            ]
+                        else:
+                            item_dict[attr] = value
+            
+            item_type = item_dict.get("type")
+            
+            # CRITICAL: Reasoning items must be followed by a function_call, message, or custom_tool_call
+            # If a reasoning item is the last item or not followed by a valid item, skip it
+            if item_type == "reasoning":
+                # Check if there's a following item that's valid
+                has_following_item = False
+                if i + 1 < len(output_items):
+                    next_item = output_items[i + 1]
+                    next_type = getattr(next_item, "type", None) if hasattr(next_item, "type") else (next_item.get("type") if isinstance(next_item, dict) else None)
+                    # Reasoning items can be followed by function_call, message, or custom_tool_call
+                    if next_type in ["function_call", "message", "custom_tool_call"]:
+                        has_following_item = True
+                
+                if not has_following_item:
+                    # Skip this reasoning item - it doesn't have a required following item
+                    logger.warning(f"Skipping reasoning item {item_dict.get('id')} - no valid following item")
+                    continue
+            
+            # Remove response-only fields that shouldn't be in input items
+            # According to API docs, these fields are only in responses, not in input:
+            # - "status": only in response items
+            # Keep only fields that are valid for input items
+            if item_type == "function_call":
+                # Valid fields: type, id, call_id, name, arguments
+                item_dict = {k: v for k, v in item_dict.items() if k in ["type", "id", "call_id", "name", "arguments"]}
+            elif item_type == "message":
+                # Valid fields: type, id, role, content
+                item_dict = {k: v for k, v in item_dict.items() if k in ["type", "id", "role", "content"]}
+            elif item_type == "reasoning":
+                # Valid fields: type, id, content, summary
+                item_dict = {k: v for k, v in item_dict.items() if k in ["type", "id", "content", "summary"]}
+            else:
+                # For unknown types, just remove status
+                item_dict.pop("status", None)
+            
+            input_items.append(item_dict)
+        
+        # Now execute tools and add their outputs
+        has_tool_calls = False
+        for item in response.output:
+            if item.type == "function_call":
+                has_tool_calls = True
+                tool_name = item.name
+                tool_args = json.loads(item.arguments)
+
+                # Execute the tool
+                if tool_name == "google_places_text_search":
+                    output = execute_google_places_text_search(
+                        query=tool_args["query"],
+                        region_code=tool_args.get("region_code")
+                    )
+                elif tool_name == "google_places_place_details":
+                    output = execute_google_places_place_details(
+                        place_id=tool_args["place_id"]
+                    )
+                else:
+                    output = json.dumps({"error": f"Unknown tool: {tool_name}"})
+
+                # Add tool result to input for next call
+                input_items.append({
+                    "type": "function_call_output",
+                    "call_id": item.call_id,
+                    "output": output
+                })
+
+        # If there were tool calls, we need to make another API call
+        # Don't apply structured outputs yet - wait until all tool calls are done
+        if has_tool_calls:
+            return call_responses_api(input_items, apply_structured_output=False)
+        
+        # No tool calls - if we weren't applying structured outputs (because tools were used),
+        # make one final call with structured outputs to get the formatted response
+        if not apply_structured_output and tools:
+            return call_responses_api(input_items, apply_structured_output=True)
+
+        # Check for incomplete responses or errors
+        if response.status != "completed":
+            reason = getattr(response.incomplete_details, "reason", None) if hasattr(response, "incomplete_details") and response.incomplete_details else None
+            raise LlmError(f"Response incomplete: {reason}")
+        
+        # No more tool calls, extract the final LetterData
+        for item in response.output:
+            if item.type == "message":
+                for content_item in item.content:
+                    # Check for refusals first
+                    if content_item.type == "refusal":
+                        refusal_text = getattr(content_item, "refusal", "Model refused to generate response")
+                        raise LlmError(f"Model refused to generate response: {refusal_text}")
+                    elif content_item.type == "output_text":
+                        try:
+                            # Parse the JSON response
+                            parsed_data = json.loads(content_item.text)
+                            return LetterData(**parsed_data)
+                        except (json.JSONDecodeError, ValueError) as e:
+                            raise LlmError(f"Failed to parse LLM response as LetterData: {e}")
+
+        raise LlmError("No valid LetterData found in response")
+
+    # Initial input
+    input_items = [
+        {"role": "developer", "content": dev_prompt},
+        {"role": "user", "content": user_prompt}
+    ]
 
     try:
-        letter = _sanitize_letter(call_parse(max_tokens=max_completion_tokens))
+        # If tools are available, start without structured outputs (model may need to call tools first)
+        # If no tools, we can apply structured outputs immediately
+        initial_apply_structured = not bool(tools)
+        letter = _sanitize_letter(call_responses_api(input_items, apply_structured_output=initial_apply_structured))
+
+        # Resolve recipient address with Places API confidence assessment
+        address_result = _resolve_recipient_address(
+            job_text=job_text,
+            letter_recipient_block=letter.recipient_block,
+            places_service=places_service,
+            is_from_firecrawl=is_from_firecrawl
+        )
+
+        logger.info(
+            "Address resolution: source=%s, confidence=%s",
+            address_result.source,
+            address_result.confidence,
+            extra={
+                "address_source": address_result.source,
+                "address_confidence": address_result.confidence,
+            },
+        )
+
         if letter.contact_person:
             logger.info(
                 "LLM contact person: %s (%s)",
@@ -544,30 +1154,10 @@ def generate_letter(*, job_text: str, cv_text: str, options: GenerateOptions) ->
                 language=options.language,
                 honorific_hint=honorific,
             )
-        recipient_block = _insert_contact_line_into_recipient_block(letter.recipient_block, contact_line)
+        recipient_block = _insert_contact_line_into_recipient_block(address_result.recipient_block, contact_line)
         return letter.model_copy(update={"body_paragraphs": body, "recipient_block": recipient_block})
     except Exception as exc:  # noqa: BLE001
-        # If the JSON parse failed due to hitting the length limit, retry once with a bit more headroom.
-        msg = str(exc)
-        if "length limit was reached" in msg or "Could not parse response content" in msg:
-            letter = _sanitize_letter(call_parse(max_tokens=max_completion_tokens + 500))
-            honorific, name = _contact_from_job_text(
-                job_text=job_text, language=options.language, contact_person=letter.contact_person
-            )
-            salutation = _salutation_from_contact(language=options.language, honorific=honorific, name=name)
-            body = _ensure_salutation_first_paragraph(body_paragraphs=letter.body_paragraphs, salutation=salutation)
-            contact_line = None
-            if name:
-                contact_line = _contact_line(
-                    name=name,
-                    gender=letter.contact_person.gender if letter.contact_person else ContactGender.unknown,
-                    language=options.language,
-                    honorific_hint=honorific,
-                )
-            recipient_block = _insert_contact_line_into_recipient_block(letter.recipient_block, contact_line)
-            return letter.model_copy(update={"body_paragraphs": body, "recipient_block": recipient_block})
-        raise
-
-    # Unreachable
+        logger.error(f"LLM generation failed: {exc}")
+        raise LlmError(f"LLM generation failed: {exc}") from exc
 
 

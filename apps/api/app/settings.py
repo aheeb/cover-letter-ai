@@ -31,12 +31,19 @@ class Settings(BaseSettings):
     # Firecrawl
     firecrawl_api_key: str | None = Field(default=None)
 
+    # Google Places
+    google_places_api_key: str | None = Field(default=None)
+    google_places_region_code: str | None = Field(default=None)  # e.g., "CH" for Switzerland
+    google_places_language_code: str | None = Field(default=None)  # e.g., "de" for German
+
     # DOCX rendering
     template_path: str | None = Field(default=None, description="Path to template.docx")
     recipient_address_indent_cm: float | None = Field(default=None)
 
     # Safety / robustness
-    request_timeout_seconds: float = Field(default=30.0)
+    # Increased default timeout to accommodate tool calling with Responses API
+    # Tool calling requires multiple round trips: reasoning -> tool calls -> tool execution -> final response
+    request_timeout_seconds: float = Field(default=120.0)
     max_cv_pdf_bytes: int = Field(default=8_000_000)  # ~8 MB
     max_job_text_chars: int = Field(default=25_000)
 

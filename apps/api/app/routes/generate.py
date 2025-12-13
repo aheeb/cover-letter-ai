@@ -150,7 +150,7 @@ async def generate(
     try:
         with anyio.fail_after(settings.request_timeout_seconds):
             letter = await anyio.to_thread.run_sync(
-                partial(generate_letter, job_text=resolved_job_text, cv_text=cv_text, options=options)
+                partial(generate_letter, job_text=resolved_job_text, cv_text=cv_text, options=options, is_from_firecrawl=bool(job_url))
             )
     except TimeoutError:
         raise ApiError(code="llm_timeout", message="LLM request timed out.", status_code=504)

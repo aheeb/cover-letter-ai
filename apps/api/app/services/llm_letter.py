@@ -32,6 +32,14 @@ _EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECA
 _PHONE_RE = re.compile(r"(?:\+?\d[\d\s().-]{6,}\d)")
 _ZIP_RE = re.compile(r"\b\d{4,5}\b")
 
+_SALUTATION_RE = re.compile(r"^\s*(sehr\s+geehrte|guten\s+tag|dear\b|hello\b)", re.IGNORECASE)
+_DE_HONORIFIC_NAME_RE = re.compile(
+    r"\b(Frau|Herrn?|Herr)\s+([A-ZÄÖÜ][A-Za-zÄÖÜäöüß-]+(?:\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüß-]+){0,3})\b"
+)
+_EN_HONORIFIC_NAME_RE = re.compile(
+    r"\b(Mr|Ms|Mrs|Dr)\.?\s+([A-Z][A-Za-z-]+(?:\s+[A-Z][A-Za-z-]+){0,2})\b"
+)
+
 
 def _looks_like_contact_paragraph(text: str) -> bool:
     t = text.strip()
@@ -123,6 +131,137 @@ def _strip_trailing_recipient_block_from_body(
             return body[:-k]
 
     return body
+
+
+def _strip_markdown_prefix(line: str) -> str:
+    # Remove common markdown list/header prefixes and quoting.
+    return line.strip().lstrip("#*-•> ").strip()
+
+
+def _best_effort_contact_from_job_text(*, job_text: str, language: Language) -> tuple[str | None, str | None]:
+    """
+    Try to detect an explicit contact person mentioned in the job text.
+
+    Returns (honorific, name) where honorific can be e.g. 'Frau'/'Herr' or 'Mr'/'Ms'/... .
+    This is intentionally conservative to avoid hallucinating names.
+    """
+    hints = (
+        "kontakt",
+        "ansprech",
+        "kontaktperson",
+        "bewerbung",
+        "fragen",
+        "auskunft",
+        "recruit",
+        "hiring",
+        "talent",
+        "hr",
+    )
+    for raw in job_text.splitlines():
+        line = _strip_markdown_prefix(raw)
+        if not line:
+            continue
+        lower = line.lower()
+        if not any(h in lower for h in hints):
+            continue
+
+        if language == Language.de:
+            m = _DE_HONORIFIC_NAME_RE.search(line)
+            if m:
+                honorific = m.group(1).lower()
+                honorific = "herr" if honorific.startswith("herr") else "frau"
+                name = m.group(2).strip()
+                return honorific, name
+        else:
+            m = _EN_HONORIFIC_NAME_RE.search(line)
+            if m:
+                honorific = m.group(1).strip()
+                name = m.group(2).strip()
+                return honorific, name
+
+        # If we couldn't match a titled person but the line looks like "Kontakt: Max Muster",
+        # capture a best-effort "name-ish" tail.
+        if ":" in line:
+            tail = line.split(":", 1)[1].strip()
+            parts = [p for p in tail.split() if p]
+            if 2 <= len(parts) <= 4 and all(p[:1].isalpha() and p[:1].upper() == p[:1] for p in parts):
+                return None, tail
+
+    return None, None
+
+
+def _surname(name: str) -> str:
+    parts = [p for p in name.strip().split() if p]
+    return parts[-1] if parts else name.strip()
+
+
+def _default_salutation(language: Language) -> str:
+    if language == Language.de:
+        return "Sehr geehrte Damen und Herren"
+    return "Dear Sir or Madam"
+
+
+def _salutation_from_contact(*, language: Language, honorific: str | None, name: str | None) -> str:
+    if language == Language.de:
+        if honorific == "frau" and name:
+            return f"Sehr geehrte Frau {_surname(name)}"
+        if honorific == "herr" and name:
+            return f"Sehr geehrter Herr {_surname(name)}"
+        if name:
+            return f"Guten Tag {name}"
+        return _default_salutation(language)
+
+    # English
+    if honorific and name:
+        return f"Dear {honorific} {_surname(name)}"
+    if name:
+        return f"Hello {name}"
+    return _default_salutation(language)
+
+
+def _normalize_salutation_line(value: str) -> str:
+    # Swiss/German letters often omit the comma; normalize it away if present.
+    return value.strip().rstrip(",").strip()
+
+
+def _ensure_salutation_first_paragraph(
+    *, body_paragraphs: list[str], salutation: str
+) -> list[str]:
+    body = [p.strip() for p in body_paragraphs if p and p.strip()]
+    salutation = _normalize_salutation_line(salutation)
+    if not salutation:
+        return body
+    if not body:
+        return [salutation]
+
+    first = body[0].strip()
+
+    # If the first paragraph already starts with a salutation, normalize and ensure it's its own paragraph.
+    if _SALUTATION_RE.match(first):
+        # Split "Sehr geehrte ... , rest" into two paragraphs to match the desired formatting.
+        if "\n" in first:
+            head, tail = first.split("\n", 1)
+            head = _normalize_salutation_line(head)
+            tail = tail.strip()
+            out = [head]
+            if tail:
+                out.append(tail)
+            out.extend(body[1:])
+            return out
+        if "," in first:
+            head, tail = first.split(",", 1)
+            head = _normalize_salutation_line(head)
+            tail = tail.strip()
+            out = [head]
+            if tail:
+                out.append(tail)
+            out.extend(body[1:])
+            return out
+        body[0] = _normalize_salutation_line(first)
+        return body
+
+    # Otherwise, prepend the computed salutation.
+    return [salutation, *body]
 
 
 def _sanitize_letter(letter: LetterData) -> LetterData:
@@ -223,7 +362,11 @@ def generate_letter(*, job_text: str, cv_text: str, options: GenerateOptions) ->
         f"{cv_text}\n\n"
         "Anforderungen:\n"
         "- Empfängerblock: 2-3 Zeilen, OHNE Kommata: (1) Firma, (2) Strasse + Nr (falls ableitbar), (3) PLZ Ort (falls ableitbar).\n"
-        "- Body: 2-4 Absätze, konkreter Fit auf Aufgaben/Anforderungen, Beispiele aus CV.\n"
+        "- Body: Beginne IMMER mit einer eigenen Anrede-Zeile als erstem Absatz.\n"
+        "  - Wenn im Jobtext eine konkrete Ansprechperson genannt ist (z.B. 'Frau Müller' oder 'Herr Meier'), verwende diese korrekt: 'Sehr geehrte Frau Müller' / 'Sehr geehrter Herr Meier'.\n"
+        "  - Wenn keine Ansprechperson explizit genannt ist: 'Sehr geehrte Damen und Herren'.\n"
+        "  - Erfinde KEINE Ansprechperson und rate keine Namen.\n"
+        "- Danach: 2-4 weitere Absätze mit konkretem Fit auf Aufgaben/Anforderungen, Beispiele aus CV.\n"
         "- WICHTIG: Wiederhole im Body KEINEN Empfängerblock und keine Adresszeilen.\n"
         "- WICHTIG: Keine Signatur-/Kontaktzeilen im Body (kein Name + Adresse + Telefon + E-Mail).\n"
         "- Keine erfundenen Fakten; wenn etwas nicht im CV steht, nicht behaupten.\n"
@@ -250,12 +393,20 @@ def generate_letter(*, job_text: str, cv_text: str, options: GenerateOptions) ->
         return message.parsed
 
     try:
-        return _sanitize_letter(call_parse(max_tokens=max_completion_tokens))
+        letter = _sanitize_letter(call_parse(max_tokens=max_completion_tokens))
+        honorific, name = _best_effort_contact_from_job_text(job_text=job_text, language=options.language)
+        salutation = _salutation_from_contact(language=options.language, honorific=honorific, name=name)
+        body = _ensure_salutation_first_paragraph(body_paragraphs=letter.body_paragraphs, salutation=salutation)
+        return letter.model_copy(update={"body_paragraphs": body})
     except Exception as exc:  # noqa: BLE001
         # If the JSON parse failed due to hitting the length limit, retry once with a bit more headroom.
         msg = str(exc)
         if "length limit was reached" in msg or "Could not parse response content" in msg:
-            return _sanitize_letter(call_parse(max_tokens=max_completion_tokens + 500))
+            letter = _sanitize_letter(call_parse(max_tokens=max_completion_tokens + 500))
+            honorific, name = _best_effort_contact_from_job_text(job_text=job_text, language=options.language)
+            salutation = _salutation_from_contact(language=options.language, honorific=honorific, name=name)
+            body = _ensure_salutation_first_paragraph(body_paragraphs=letter.body_paragraphs, salutation=salutation)
+            return letter.model_copy(update={"body_paragraphs": body})
         raise
 
     # Unreachable

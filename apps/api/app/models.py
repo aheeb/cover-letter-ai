@@ -52,3 +52,16 @@ class JobPreview(BaseModel):
     role: str | None = None
 
 
+class LetterResponse(BaseModel):
+    letter: LetterData
+    date_line: str
+    company_name: str
+    docx_filename: str
+    pdf_filename: str
+
+
+class RenderRequest(BaseModel):
+    letter: LetterData
+    date_line: str
+
+

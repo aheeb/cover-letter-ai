@@ -12,6 +12,8 @@ from app.errors import ApiError, api_error_response, log_api_error
 from app.logging import configure_logging, get_logger, request_id_var
 from app.routes.generate import router as generate_router
 from app.routes.job_preview import router as job_preview_router
+from app.routes.letter import router as letter_router
+from app.routes.render import router as render_router
 from app.settings import get_settings
 
 def create_app() -> FastAPI:
@@ -90,6 +92,8 @@ def create_app() -> FastAPI:
 
     app.include_router(generate_router)
     app.include_router(job_preview_router)
+    app.include_router(letter_router)
+    app.include_router(render_router)
 
     return app
 

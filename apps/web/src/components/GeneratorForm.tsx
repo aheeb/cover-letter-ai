@@ -5,6 +5,7 @@ import {
   Download,
   FileText,
   Link as LinkIcon,
+  Save,
   Sparkles,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -23,7 +24,6 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { parseFilenameFromContentDisposition } from "@/lib/contentDisposition";
 import { getApiBaseUrl } from "@/lib/env";
 import { HttpError, fetchOk } from "@/lib/http";
 
@@ -31,16 +31,25 @@ type Language = "de" | "en";
 type Tone = "professional" | "friendly" | "concise";
 type Length = "short" | "medium" | "long";
 
-type GenerateState =
-  | { status: "idle" }
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | { status: "done"; downloadUrl: string; filename: string };
-
 type PreviewState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "error"; message: string };
+  | { status: "error"; message: string }
+  | {
+      status: "done";
+      letter: unknown; // LetterData from API
+      dateLine: string;
+      companyName: string;
+      pdfBlobUrl: string;
+      pdfFilename: string;
+      docxFilename: string;
+    };
+
+type NotionSaveState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | { status: "done"; notionPageUrl: string };
 
 function JobSection(props: {
   jobUrl: string;
@@ -220,7 +229,7 @@ function getErrorMessage(err: unknown): string {
 
 export function GeneratorForm() {
   const apiBaseUrl = useMemo(() => getApiBaseUrl(), []);
-  const downloadUrlRef = useRef<string | null>(null);
+  const pdfBlobUrlRef = useRef<string | null>(null);
 
   const [jobUrl, setJobUrl] = useState<string>("");
   const [jobText, setJobText] = useState<string>("");
@@ -231,30 +240,39 @@ export function GeneratorForm() {
   const [length, setLength] = useState<Length>("medium");
   const [targetRole, setTargetRole] = useState<string>("");
 
-  const [state, setState] = useState<GenerateState>({ status: "idle" });
   const [previewState, setPreviewState] = useState<PreviewState>({
+    status: "idle",
+  });
+  const [autofillState, setAutofillState] = useState<{
+    status: "idle" | "loading" | "error";
+    message?: string;
+  }>({ status: "idle" });
+  const [notionSaveState, setNotionSaveState] = useState<NotionSaveState>({
     status: "idle",
   });
 
   useEffect(() => {
     return () => {
-      if (downloadUrlRef.current) URL.revokeObjectURL(downloadUrlRef.current);
+      if (pdfBlobUrlRef.current) URL.revokeObjectURL(pdfBlobUrlRef.current);
     };
   }, []);
 
-  async function onGenerate() {
+  async function onGeneratePreview() {
     if (jobUrl.trim().length === 0 && jobText.trim().length === 0) {
-      setState({
+      setPreviewState({
         status: "error",
         message: "Please provide either a Job URL or Job Text.",
       });
       return;
     }
 
-    if (state.status === "done") {
-      URL.revokeObjectURL(state.downloadUrl);
+    // Clean up previous preview
+    if (previewState.status === "done" && pdfBlobUrlRef.current) {
+      URL.revokeObjectURL(pdfBlobUrlRef.current);
+      pdfBlobUrlRef.current = null;
     }
-    setState({ status: "loading" });
+
+    setPreviewState({ status: "loading" });
 
     const form = new FormData();
     if (cvFile) form.append("cv_pdf", cvFile);
@@ -267,43 +285,144 @@ export function GeneratorForm() {
       form.append("target_role", targetRole.trim());
 
     try {
-      const res = await fetchOk(new URL("/v1/generate", apiBaseUrl), {
+      // Step 1: Generate letter data
+      const letterRes = await fetchOk(new URL("/v1/letter", apiBaseUrl), {
         method: "POST",
         body: form,
       });
+      const letterData = await letterRes.json();
+
+      // Step 2: Render PDF
+      const pdfRes = await fetchOk(new URL("/v1/render/pdf", apiBaseUrl), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          letter: letterData.letter,
+          date_line: letterData.date_line,
+        }),
+      });
+
+      const pdfBlob = await pdfRes.blob();
+      const pdfBlobUrl = URL.createObjectURL(pdfBlob);
+      pdfBlobUrlRef.current = pdfBlobUrl;
+
+      setPreviewState({
+        status: "done",
+        letter: letterData.letter,
+        dateLine: letterData.date_line,
+        companyName: letterData.company_name,
+        pdfBlobUrl,
+        pdfFilename: letterData.pdf_filename,
+        docxFilename: letterData.docx_filename,
+      });
+    } catch (err) {
+      setPreviewState({ status: "error", message: getErrorMessage(err) });
+    }
+  }
+
+  async function onDownloadDocx() {
+    if (previewState.status !== "done") return;
+
+    try {
+      const res = await fetchOk(new URL("/v1/render/docx", apiBaseUrl), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          letter: previewState.letter,
+          date_line: previewState.dateLine,
+        }),
+      });
 
       const blob = await res.blob();
-      const downloadUrl = URL.createObjectURL(blob);
-      downloadUrlRef.current = downloadUrl;
-      const filename =
-        parseFilenameFromContentDisposition(
-          res.headers.get("Content-Disposition")
-        ) ?? "Cover_Letter.docx";
-
-      setState({ status: "done", downloadUrl, filename });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = previewState.docxFilename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     } catch (err) {
-      setState({ status: "error", message: getErrorMessage(err) });
+      // Show error somehow - for now just log
+      console.error("Failed to download DOCX:", err);
+    }
+  }
+
+  async function onSaveToNotion() {
+    if (previewState.status !== "done") return;
+
+    setNotionSaveState({ status: "loading" });
+
+    try {
+      // Convert PDF blob to File for upload
+      const pdfBlob = await fetch(previewState.pdfBlobUrl).then((r) =>
+        r.blob()
+      );
+      const pdfFile = new File([pdfBlob], previewState.pdfFilename, {
+        type: "application/pdf",
+      });
+
+      // Fetch DOCX from API
+      const docxRes = await fetchOk(new URL("/v1/render/docx", apiBaseUrl), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          letter: previewState.letter,
+          date_line: previewState.dateLine,
+        }),
+      });
+      const docxBlob = await docxRes.blob();
+      const docxFile = new File([docxBlob], previewState.docxFilename, {
+        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      });
+
+      const form = new FormData();
+      form.append("pdf", pdfFile);
+      form.append("docx", docxFile);
+      form.append("company", previewState.companyName);
+      form.append("job_url", jobUrl.trim() || "");
+      form.append("pdf_filename", previewState.pdfFilename);
+      form.append("docx_filename", previewState.docxFilename);
+
+      const res = await fetchOk(
+        new URL("/api/notion/save", window.location.origin),
+        {
+          method: "POST",
+          body: form,
+        }
+      );
+
+      const data = await res.json();
+      setNotionSaveState({
+        status: "done",
+        notionPageUrl: data.notion_page_url,
+      });
+    } catch (err) {
+      setNotionSaveState({
+        status: "error",
+        message: getErrorMessage(err),
+      });
     }
   }
 
   async function autofillRoleFromUrl() {
     const url = jobUrl.trim();
     if (!url) {
-      setPreviewState({
+      setAutofillState({
         status: "error",
         message: "Please enter a Job URL first.",
       });
       return;
     }
     if (jobText.trim().length > 0) {
-      setPreviewState({
+      setAutofillState({
         status: "error",
         message: "Job text is set – role will be derived from it.",
       });
       return;
     }
 
-    setPreviewState({ status: "loading" });
+    setAutofillState({ status: "loading" });
     try {
       const form = new FormData();
       form.append("job_url", url);
@@ -321,34 +440,75 @@ export function GeneratorForm() {
         const role = (data as { role: string }).role.trim();
         if (role.length > 0) {
           setTargetRole(role);
-          setPreviewState({ status: "idle" });
+          setAutofillState({ status: "idle" });
           return;
         }
       }
-      setPreviewState({
+      setAutofillState({
         status: "error",
         message: "Could not detect role from URL.",
       });
     } catch (err) {
-      setPreviewState({ status: "error", message: getErrorMessage(err) });
+      setAutofillState({ status: "error", message: getErrorMessage(err) });
     }
   }
 
   return (
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1.4fr_1fr]">
       <div className="space-y-6">
-        {state.status === "error" && (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600 flex items-center gap-2">
-            <AlertCircle className="h-4 w-4" />
-            {state.message}
-          </div>
-        )}
-
         {previewState.status === "error" && (
           <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600 flex items-center gap-2">
             <AlertCircle className="h-4 w-4" />
             {previewState.message}
           </div>
+        )}
+
+        {autofillState.status === "error" && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4" />
+            {autofillState.message}
+          </div>
+        )}
+
+        {notionSaveState.status === "error" && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4" />
+            {notionSaveState.message}
+          </div>
+        )}
+
+        {notionSaveState.status === "done" && (
+          <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+            <p className="font-medium mb-2">Saved to Notion!</p>
+            <a
+              href={notionSaveState.notionPageUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:no-underline"
+            >
+              Open in Notion →
+            </a>
+          </div>
+        )}
+
+        {previewState.status === "done" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Preview</CardTitle>
+              <CardDescription>
+                Review your cover letter before saving
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="border border-zinc-200 rounded-lg overflow-hidden">
+                <iframe
+                  src={previewState.pdfBlobUrl}
+                  className="w-full h-[600px]"
+                  title="Cover letter preview"
+                />
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         <Card>
@@ -403,38 +563,55 @@ export function GeneratorForm() {
               targetRole={targetRole}
               setTargetRole={setTargetRole}
               onAutofillRole={autofillRoleFromUrl}
-              isAutofilling={previewState.status === "loading"}
+              isAutofilling={autofillState.status === "loading"}
             />
 
-            <div className="mt-8 pt-6 border-t border-zinc-100">
+            <div className="mt-8 pt-6 border-t border-zinc-100 space-y-3">
               <Button
                 className="w-full h-12 text-base shadow-lg hover:shadow-xl transition-all"
-                onClick={onGenerate}
-                disabled={state.status === "loading"}
+                onClick={onGeneratePreview}
+                disabled={previewState.status === "loading"}
               >
-                {state.status === "loading" ? (
+                {previewState.status === "loading" ? (
                   <>
                     <Sparkles className="mr-2 h-4 w-4 animate-spin" />
-                    Generating...
+                    Generating Preview...
                   </>
                 ) : (
                   <>
                     <Sparkles className="mr-2 h-4 w-4" />
-                    Generate Letter
+                    Generate Preview
                   </>
                 )}
               </Button>
 
-              {state.status === "done" && (
-                <div className="mt-4 animate-in fade-in slide-in-from-top-2">
-                  <a
-                    href={state.downloadUrl}
-                    download={state.filename}
-                    className="flex items-center justify-center gap-2 w-full rounded-md border border-zinc-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-700 hover:bg-green-100 transition-colors"
+              {previewState.status === "done" && (
+                <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                  <Button
+                    className="w-full"
+                    variant="outline"
+                    onClick={onDownloadDocx}
                   >
-                    <Download className="h-4 w-4" />
-                    Download {state.filename}
-                  </a>
+                    <Download className="mr-2 h-4 w-4" />
+                    Download DOCX
+                  </Button>
+                  <Button
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                    onClick={onSaveToNotion}
+                    disabled={notionSaveState.status === "loading"}
+                  >
+                    {notionSaveState.status === "loading" ? (
+                      <>
+                        <Sparkles className="mr-2 h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="mr-2 h-4 w-4" />
+                        Save to Notion
+                      </>
+                    )}
+                  </Button>
                 </div>
               )}
             </div>

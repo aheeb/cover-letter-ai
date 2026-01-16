@@ -28,8 +28,8 @@ class Settings(BaseSettings):
     openai_api_key: str | None = Field(default=None)
     openai_model: str = Field(default="gpt-5-mini")
 
-    # Firecrawl
-    firecrawl_api_key: str | None = Field(default=None)
+    # Exa (web scraping)
+    exa_api_key: str | None = Field(default=None)
 
     # Google Places
     google_places_api_key: str | None = Field(default=None)

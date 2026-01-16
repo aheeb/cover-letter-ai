@@ -7,16 +7,16 @@ from urllib.parse import urlparse
 
 import anyio
 from fastapi import APIRouter, File, Form, UploadFile
-from starlette.responses import Response
+
 # AnyIO v4 removed `anyio.exceptions`. `anyio.fail_after(...)` raises `TimeoutError`,
 # so we catch `TimeoutError` directly (works across AnyIO versions).
 
 from app.errors import ApiError
 from app.logging import get_logger
-from app.models import GenerateOptions, Language, Length, Tone
+from app.models import GenerateOptions, Language, Length, LetterResponse, Tone
 from app.paths import default_cv_pdf_path
+from app.routes.generate import _company_name_for_filename, _validate_job_url
 from app.services.cv_text import extract_text_from_pdf_bytes
-from app.services.docx_render import TemplateNotFoundError, render_letter_docx
 from app.services.exa_text import ExaError, ExaTextService
 from app.services.llm_letter import LlmError, generate_letter
 from app.settings import get_settings
@@ -27,39 +27,8 @@ router = APIRouter()
 logger = get_logger(__name__)
 
 
-def _company_name_for_filename(*, company: str, recipient_block: str) -> str:
-    """
-    Best-effort: extract *company name only* (without address) for filenames.
-
-    The LLM may return `company` including address parts (e.g. "ACME AG, Musterstrasse 1").
-    For filenames we want just "ACME AG".
-    """
-
-    def normalize(value: str) -> str:
-        first_line = value.strip().splitlines()[0].strip() if value.strip() else ""
-        # Remove everything after the first comma (usually address).
-        if "," in first_line:
-            first_line = first_line.split(",", 1)[0].strip()
-        return first_line
-
-    c = normalize(company)
-    if c and c.lower() != "firma":
-        return c
-    # Fallback: first line of recipient block
-    r0 = normalize(recipient_block)
-    return r0 or c or company.strip() or "Firma"
-
-
-def _validate_job_url(value: str) -> str:
-    url = value.strip()
-    parsed = urlparse(url)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise ApiError(code="invalid_job_url", message="job_url must be a valid http(s) URL.", status_code=400)
-    return url
-
-
-@router.post("/v1/generate")
-async def generate(
+@router.post("/v1/letter", response_model=LetterResponse)
+async def letter(
     cv_pdf: UploadFile | None = File(None, description="CV as PDF (optional; defaults to repo-root CV)"),
     job_url: str | None = Form(None),
     job_text: str | None = Form(None),
@@ -67,7 +36,11 @@ async def generate(
     tone: Tone = Form(Tone.professional),
     length: Length = Form(Length.medium),
     target_role: str | None = Form(None),
-) -> Response:
+) -> LetterResponse:
+    """
+    Generate letter data (structured JSON) without rendering files.
+    Returns LetterData + metadata for preview and subsequent rendering.
+    """
     settings = get_settings()
     job_url = job_url.strip() if job_url else None
     job_text = job_text.strip() if job_text else None
@@ -83,7 +56,7 @@ async def generate(
         )
 
     start = perf_counter()
-    logger.info("generate:start")
+    logger.info("letter:start")
 
     raw_pdf: bytes
     if cv_pdf is None:
@@ -161,37 +134,20 @@ async def generate(
 
     date_line = format_letter_date(date.today(), language)
 
-    template_path = settings.template_path_resolved
-    try:
-        docx_bytes = await anyio.to_thread.run_sync(
-            partial(
-                render_letter_docx,
-                template_path=template_path,
-                letter=letter,
-                date_line=date_line,
-                recipient_indent_cm=settings.recipient_address_indent_cm,
-            )
-        )
-    except TemplateNotFoundError as exc:
-        raise ApiError(code="template_not_found", message=str(exc), status_code=500)
-    except Exception as exc:  # noqa: BLE001
-        raise ApiError(code="docx_render_failed", message=f"DOCX render failed: {exc}", status_code=500)
-
     company_name = _company_name_for_filename(company=letter.company, recipient_block=letter.recipient_block)
     company_slug = ascii_slug(company_name)
-    filename = f"Motivationsschreiben_{company_slug}_Andri_Heeb.docx"
+    docx_filename = f"Motivationsschreiben_{company_slug}_Andri_Heeb.docx"
+    pdf_filename = f"Motivationsschreiben_{company_slug}_Andri_Heeb.pdf"
 
     duration_ms = int((perf_counter() - start) * 1000)
-    logger.info(f"generate:done duration_ms={duration_ms}")
+    logger.info(f"letter:done duration_ms={duration_ms}")
 
-    headers = {
-        "Content-Disposition": f'attachment; filename="{filename}"',
-    }
-
-    return Response(
-        content=docx_bytes,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers=headers,
+    return LetterResponse(
+        letter=letter,
+        date_line=date_line,
+        company_name=company_name,
+        docx_filename=docx_filename,
+        pdf_filename=pdf_filename,
     )
 
 

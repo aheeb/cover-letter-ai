@@ -241,7 +241,7 @@ def _assess_places_confidence(search_results: list[dict], place_details: dict | 
     return "low"
 
 
-def _resolve_recipient_address(*, job_text: str, letter_recipient_block: str, places_service: GooglePlacesService | None, is_from_firecrawl: bool) -> AddressResolutionResult:
+def _resolve_recipient_address(*, job_text: str, letter_recipient_block: str, places_service: GooglePlacesService | None, is_from_scraper: bool) -> AddressResolutionResult:
     """
     Resolve recipient address using Places API when possible, fallback to LLM result.
 
@@ -798,7 +798,7 @@ def _normalize_recipient_block(value: str) -> str:
     return "\n".join(deduped).strip()
 
 
-def generate_letter(*, job_text: str, cv_text: str, options: GenerateOptions, is_from_firecrawl: bool = False) -> LetterData:
+def generate_letter(*, job_text: str, cv_text: str, options: GenerateOptions, is_from_scraper: bool = False) -> LetterData:
     settings = get_settings()
     if not settings.openai_api_key:
         raise LlmError("Missing OPENAI_API_KEY.")
@@ -1118,7 +1118,7 @@ def generate_letter(*, job_text: str, cv_text: str, options: GenerateOptions, is
             job_text=job_text,
             letter_recipient_block=letter.recipient_block,
             places_service=places_service,
-            is_from_firecrawl=is_from_firecrawl
+            is_from_scraper=is_from_scraper
         )
 
         logger.info(

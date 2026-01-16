@@ -19,7 +19,7 @@ RUN pip install --no-cache-dir --upgrade pip setuptools build && \
 
 # Copy application code
 COPY app/ ./app/
-COPY template.docx ./
+COPY template*.docx ./
 
 # Expose port (Railway sets PORT env var)
 EXPOSE 8000

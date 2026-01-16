@@ -16,7 +16,11 @@ def repo_root() -> Path:
 
     # Prefer walking upwards until we find the template (repo root indicator).
     for candidate in parents:
-        if (candidate / "template.docx").exists() or (candidate / "Andri_Heeb_Lebenslauf.pdf").exists():
+        if (
+            (candidate / "template_official.docx").exists()
+            or (candidate / "template.docx").exists()
+            or (candidate / "Andri_Heeb_Lebenslauf.pdf").exists()
+        ):
             return candidate
 
     target_index = 3
@@ -32,7 +36,11 @@ def repo_root() -> Path:
 
 
 def default_template_path() -> Path:
-    return repo_root() / "template.docx"
+    root = repo_root()
+    preferred = root / "template_official.docx"
+    if preferred.exists():
+        return preferred
+    return root / "template.docx"
 
 
 def default_cv_pdf_path() -> Path:

@@ -6,7 +6,11 @@ from pathlib import Path
 
 from docxtpl import DocxTemplate, Listing
 from docx import Document
+from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
+from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from docx.shared import Cm, Emu, Pt
 
 from app.models import LetterData
@@ -21,6 +25,9 @@ def render_letter_docx(
     template_path: Path,
     letter: LetterData,
     date_line: str,
+    sender_adress: str = "",
+    sender_name: str = "",
+    location: str = "",
     recipient_indent_cm: float | None = None,
 ) -> bytes:
     if not template_path.exists():
@@ -33,12 +40,19 @@ def render_letter_docx(
     recipient_lines = [ln.strip() for ln in letter.recipient_block.splitlines() if ln.strip()]
     recipient_listing = Listing("\a".join(recipient_lines)) if recipient_lines else letter.recipient_block
 
+    sender_lines = [ln.strip() for ln in sender_adress.splitlines() if ln.strip()]
+    sender_listing = Listing("\a".join(sender_lines)) if sender_lines else sender_adress
+
     context: dict[str, object] = {
         # Template placeholders (as provided by user):
         "date": date_line,
         "recipient_address": recipient_listing,
         "role": letter.role_title,
         "body_of_motivational_letter": body_listing,
+        "sender_adress": sender_listing,
+        "sender_address": sender_listing,
+        "sender_name": sender_name,
+        "location": location,
 
         # Backwards-compatible keys (safe to keep):
         "date_line": date_line,
@@ -58,7 +72,19 @@ def render_letter_docx(
     # Post-process: ensure recipient address block is consistently left-aligned, but positioned
     # on the right side of the page (common Swiss letter layout). This avoids template tweaks.
     doc = Document(rendered)
+
+    # If we rely on the date line's tab stop for recipient alignment, capture it now
+    # before we potentially move the date into a table.
+    if recipient_indent_cm is None:
+        paragraphs = list(_iter_all_paragraphs(doc))
+        date_paragraph = _find_date_paragraph(paragraphs, date_line)
+        tab_twips = _first_tab_stop_twips(date_paragraph) if date_paragraph is not None else None
+        if tab_twips is not None:
+            recipient_indent_cm = (tab_twips * 2.54) / 1440
+
+    _format_sender_date_table(doc, sender_lines, location, date_line, recipient_indent_cm)
     _format_recipient_block(doc, recipient_lines, date_line, recipient_indent_cm)
+    _format_sender_block(doc, sender_lines)
 
     final = BytesIO()
     doc.save(final)
@@ -128,6 +154,228 @@ def _format_recipient_block(
         p.paragraph_format.space_before = Pt(0)
         p.paragraph_format.space_after = Pt(0)
         p.paragraph_format.line_spacing = 1.0
+
+
+def _format_sender_block(doc: Document, sender_lines: list[str]) -> None:
+    if not sender_lines:
+        return
+
+    paragraphs = list(_iter_all_paragraphs(doc))
+    block = _find_paragraph_block(paragraphs, sender_lines)
+    if not _block_covers_all_recipient_lines(block, sender_lines):
+        block = _find_recipient_block_by_proximity(paragraphs, sender_lines, start_idx=0)
+    if not block:
+        return
+
+    for p in block:
+        _strip_leading_tab(p)
+        p.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+        p.paragraph_format.left_indent = Cm(0)
+        p.paragraph_format.first_line_indent = Cm(0)
+        p.paragraph_format.space_before = Pt(0)
+        p.paragraph_format.space_after = Pt(0)
+        p.paragraph_format.line_spacing = 1.0
+
+
+def _compose_date_line(location: str, date_line: str) -> str:
+    loc = location.strip()
+    date = date_line.strip()
+    if loc and date:
+        return f"{loc}, {date}"
+    return loc or date
+
+
+def _set_table_borders_none(table) -> None:
+    tbl = table._tbl
+    tbl_pr = getattr(tbl, "tblPr", None)
+    if tbl_pr is None:
+        tbl_pr = OxmlElement("w:tblPr")
+        tbl.insert(0, tbl_pr)
+
+    # Use fixed layout so column widths are respected consistently (Word + LibreOffice).
+    layout = tbl_pr.find(qn("w:tblLayout"))
+    if layout is None:
+        layout = OxmlElement("w:tblLayout")
+        tbl_pr.append(layout)
+    layout.set(qn("w:type"), "fixed")
+
+    borders = tbl_pr.find(qn("w:tblBorders"))
+    if borders is None:
+        borders = OxmlElement("w:tblBorders")
+        tbl_pr.append(borders)
+
+    for edge in ("top", "left", "bottom", "right", "insideH", "insideV"):
+        edge_el = borders.find(qn(f"w:{edge}"))
+        if edge_el is None:
+            edge_el = OxmlElement(f"w:{edge}")
+            borders.append(edge_el)
+        edge_el.set(qn("w:val"), "nil")
+
+
+def _set_table_cell_margins_zero(table) -> None:
+    """
+    Remove default table cell margins/padding.
+
+    Word defaults often add a small left/right inset inside cells. LibreOffice tends to preserve
+    that inset when converting to PDF, which makes the right column text start slightly to the right
+    of the intended column boundary. Setting margins to 0 makes the date block align exactly with
+    the recipient block indent.
+    """
+    tbl = table._tbl
+    tbl_pr = getattr(tbl, "tblPr", None)
+    if tbl_pr is None:
+        tbl_pr = OxmlElement("w:tblPr")
+        tbl.insert(0, tbl_pr)
+
+    mar = tbl_pr.find(qn("w:tblCellMar"))
+    if mar is None:
+        mar = OxmlElement("w:tblCellMar")
+        tbl_pr.append(mar)
+
+    for edge in ("top", "left", "bottom", "right"):
+        el = mar.find(qn(f"w:{edge}"))
+        if el is None:
+            el = OxmlElement(f"w:{edge}")
+            mar.append(el)
+        el.set(qn("w:w"), "0")
+        el.set(qn("w:type"), "dxa")
+
+
+def _format_sender_date_table(
+    doc: Document,
+    sender_lines: list[str],
+    location: str,
+    date_line: str,
+    column_split_cm: float | None,
+) -> None:
+    """
+    If sender address + date live in the same paragraph, replace it with a two-column
+    table so the date aligns with the first sender line.
+    """
+    sender_lines = [ln.strip() for ln in sender_lines if ln and ln.strip()]
+    if not sender_lines:
+        return
+    date_text = _compose_date_line(location, date_line)
+    if not date_text:
+        return
+
+    paragraphs = list(_iter_all_paragraphs(doc))
+
+    date_paragraph = _find_date_paragraph(paragraphs, date_line)
+    if date_paragraph is None or _is_in_table_cell(date_paragraph):
+        return
+
+    try:
+        date_idx = paragraphs.index(date_paragraph)
+    except ValueError:
+        return
+
+    # docxtpl's Listing can expand `{{sender_adress}}` into multiple *paragraphs* while the
+    # `{{location}}, {{date}}` run stays attached to the last one — so the date ends up aligned
+    # with the LAST sender line. We detect the sender block preceding the date paragraph and
+    # replace the whole cluster with a 2-column, borderless table.
+    last_sender = sender_lines[-1]
+    start_idx = None
+    max_start = max(0, date_idx - (len(sender_lines) - 1))
+    for candidate in range(max_start, date_idx + 1):
+        ok = True
+        for j, line in enumerate(sender_lines):
+            pi = candidate + j
+            if pi > date_idx:
+                ok = False
+                break
+            p = paragraphs[pi]
+            if pi == date_idx:
+                # The date paragraph must contain both the date and the last sender line somewhere.
+                if date_line not in p.text or line not in p.text:
+                    ok = False
+                    break
+            else:
+                if _normalize_recipient_text(p.text) != _normalize_recipient_text(line):
+                    ok = False
+                    break
+        if ok:
+            start_idx = candidate
+            break
+
+    if start_idx is None:
+        # Fallback: if the date paragraph includes the last sender line, assume the sender block
+        # starts at the first occurrence of the first sender line before the date.
+        first_sender = sender_lines[0]
+        for i in range(0, date_idx + 1):
+            if first_sender in paragraphs[i].text:
+                start_idx = i
+                break
+        if start_idx is None:
+            return
+
+    base_style = paragraphs[start_idx].style
+
+    table = doc.add_table(rows=1, cols=2)
+    table.autofit = False
+    table.alignment = WD_TABLE_ALIGNMENT.LEFT
+    _set_table_borders_none(table)
+    _set_table_cell_margins_zero(table)
+
+    # Insert the table before the first paragraph of the cluster.
+    paragraphs[start_idx]._p.addprevious(table._tbl)
+
+    left_cell, right_cell = table.rows[0].cells
+    left_cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.TOP
+    right_cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.TOP
+
+    # Make the right column start exactly where the template's tab stop is (same position we
+    # use for the recipient block indent), so the recipient block and date block align.
+    if column_split_cm is not None:
+        section = doc.sections[0]
+        usable = section.page_width - (section.left_margin or Cm(2.0)) - (section.right_margin or Cm(2.0))
+        left_w = Cm(column_split_cm)
+        # Clamp: keep at least a little room for the right column.
+        min_right = Cm(2.0)
+        if left_w > usable - min_right:
+            left_w = usable - min_right
+        if left_w < Cm(2.0):
+            left_w = Cm(2.0)
+        right_w = usable - left_w
+        table.columns[0].width = left_w
+        table.columns[1].width = right_w
+
+    # Fill left cell with sender lines (keeps exact line breaks).
+    left_cell.text = sender_lines[0]
+    lp = left_cell.paragraphs[0]
+    lp.style = base_style
+    lp.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+    lp.paragraph_format.left_indent = Cm(0)
+    lp.paragraph_format.first_line_indent = Cm(0)
+    lp.paragraph_format.space_before = Pt(0)
+    lp.paragraph_format.space_after = Pt(0)
+    lp.paragraph_format.line_spacing = 1.0
+    for line in sender_lines[1:]:
+        p = left_cell.add_paragraph(line)
+        p.style = base_style
+        p.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+        p.paragraph_format.left_indent = Cm(0)
+        p.paragraph_format.first_line_indent = Cm(0)
+        p.paragraph_format.space_before = Pt(0)
+        p.paragraph_format.space_after = Pt(0)
+        p.paragraph_format.line_spacing = 1.0
+
+    # Fill right cell with date line, right-aligned.
+    right_cell.text = date_text
+    rp = right_cell.paragraphs[0]
+    rp.style = base_style
+    # Match the template behavior (date starts at the same tab stop as recipient block).
+    rp.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+    rp.paragraph_format.left_indent = Cm(0)
+    rp.paragraph_format.first_line_indent = Cm(0)
+    rp.paragraph_format.space_before = Pt(0)
+    rp.paragraph_format.space_after = Pt(0)
+    rp.paragraph_format.line_spacing = 1.0
+
+    # Remove the original sender/date cluster paragraphs to avoid duplicates.
+    for pi in range(start_idx, date_idx + 1):
+        p = paragraphs[pi]
+        p._p.getparent().remove(p._p)
 
 
 def _recipient_block_indent(doc: Document, date_paragraph, indent_override_cm: float | None) -> Emu | None:

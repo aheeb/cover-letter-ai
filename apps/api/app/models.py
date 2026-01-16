@@ -63,5 +63,8 @@ class LetterResponse(BaseModel):
 class RenderRequest(BaseModel):
     letter: LetterData
     date_line: str
+    sender_adress: str = ""
+    sender_name: str = ""
+    location: str = ""
 
 

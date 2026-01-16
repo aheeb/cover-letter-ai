@@ -57,6 +57,20 @@ def create_app() -> FastAPI:
     )
 
     @app.middleware("http")
+    async def enforce_internal_token(request: Request, call_next):
+        token = settings.internal_api_token
+        if token and request.url.path.startswith("/v1/"):
+            header = request.headers.get("X-Internal-Token")
+            if header != token:
+                err = ApiError(
+                    code="unauthorized",
+                    message="Missing or invalid internal token.",
+                    status_code=401,
+                )
+                return api_error_response(err)
+        return await call_next(request)
+
+    @app.middleware("http")
     async def add_request_id(request: Request, call_next):
         rid = request.headers.get("X-Request-ID") or str(uuid4())
         token = request_id_var.set(rid)

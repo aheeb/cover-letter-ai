@@ -18,13 +18,16 @@ def render_letter_pdf(
     template_path: Path,
     letter: LetterData,
     date_line: str,
+    sender_adress: str = "",
+    sender_name: str = "",
+    location: str = "",
     recipient_indent_cm: float | None = None,
 ) -> bytes:
     """
     Render DOCX then convert to PDF using LibreOffice headless.
 
     Args:
-        template_path: Path to template.docx
+        template_path: Path to template_official.docx
         letter: LetterData to render
         date_line: Formatted date line
         recipient_indent_cm: Optional indent override
@@ -40,6 +43,9 @@ def render_letter_pdf(
         template_path=template_path,
         letter=letter,
         date_line=date_line,
+        sender_adress=sender_adress,
+        sender_name=sender_name,
+        location=location,
         recipient_indent_cm=recipient_indent_cm,
     )
 

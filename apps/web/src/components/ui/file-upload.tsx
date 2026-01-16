@@ -1,6 +1,9 @@
-import { cn } from "@/lib/utils";
-import { FileText, Upload, X } from "lucide-react";
+"use client";
+
 import * as React from "react";
+import { cn } from "@/lib/utils";
+import { Upload, File, X } from "lucide-react";
+import { Button } from "./button";
 
 interface FileUploadProps {
   file: File | null;
@@ -8,6 +11,7 @@ interface FileUploadProps {
   accept?: string;
   label?: string;
   description?: string;
+  className?: string;
 }
 
 export function FileUpload({
@@ -15,7 +19,8 @@ export function FileUpload({
   onFileSelect,
   accept,
   label = "Upload file",
-  description = "Drag and drop or click to upload",
+  description = "Drag & drop or click to browse",
+  className,
 }: FileUploadProps) {
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = React.useState(false);
@@ -33,8 +38,9 @@ export function FileUpload({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    if (e.dataTransfer.files?.[0]) {
-      onFileSelect(e.dataTransfer.files[0]);
+    const droppedFile = e.dataTransfer.files[0];
+    if (droppedFile) {
+      onFileSelect(droppedFile);
     }
   };
 
@@ -42,10 +48,19 @@ export function FileUpload({
     inputRef.current?.click();
   };
 
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      onFileSelect(selectedFile);
+    }
+  };
+
   const handleRemove = (e: React.MouseEvent) => {
     e.stopPropagation();
     onFileSelect(null);
-    if (inputRef.current) inputRef.current.value = "";
+    if (inputRef.current) {
+      inputRef.current.value = "";
+    }
   };
 
   return (
@@ -55,43 +70,52 @@ export function FileUpload({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       className={cn(
-        "group relative flex min-h-[120px] cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-zinc-200 transition-colors hover:bg-zinc-50",
-        isDragging && "border-zinc-900 bg-zinc-50",
-        file && "border-zinc-200 bg-zinc-50/50"
+        "relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 transition-all duration-200 cursor-pointer",
+        isDragging
+          ? "border-primary bg-primary/5"
+          : "border-muted-foreground/25 hover:border-muted-foreground/50 hover:bg-muted/50",
+        file && "border-solid border-primary/50 bg-primary/5",
+        className
       )}
     >
       <input
         ref={inputRef}
         type="file"
-        className="hidden"
         accept={accept}
-        onChange={(e) => onFileSelect(e.target.files?.[0] || null)}
+        onChange={handleChange}
+        className="hidden"
       />
 
       {file ? (
-        <div className="flex flex-col items-center gap-2 p-4 text-center">
-          <div className="rounded-full bg-zinc-100 p-2">
-            <FileText className="h-6 w-6 text-zinc-600" />
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+            <File className="h-5 w-5 text-primary" />
           </div>
-          <div className="text-sm font-medium text-zinc-900">{file.name}</div>
-          <div className="text-xs text-zinc-500">
-            {(file.size / 1024 / 1024).toFixed(2)} MB
+          <div className="flex-1 min-w-0">
+            <p className="truncate text-sm font-medium">{file.name}</p>
+            <p className="text-xs text-muted-foreground">
+              {(file.size / 1024).toFixed(1)} KB
+            </p>
           </div>
-          <button
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0"
             onClick={handleRemove}
-            className="absolute right-2 top-2 rounded-full p-1 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-600"
           >
             <X className="h-4 w-4" />
-          </button>
+            <span className="sr-only">Remove file</span>
+          </Button>
         </div>
       ) : (
-        <div className="flex flex-col items-center gap-2 p-4 text-center">
-          <div className="rounded-full bg-zinc-100 p-2 group-hover:bg-zinc-200">
-            <Upload className="h-6 w-6 text-zinc-500" />
+        <>
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+            <Upload className="h-5 w-5 text-muted-foreground" />
           </div>
-          <div className="text-sm font-medium text-zinc-900">{label}</div>
-          <div className="text-xs text-zinc-500">{description}</div>
-        </div>
+          <p className="mt-3 text-sm font-medium">{label}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+        </>
       )}
     </div>
   );

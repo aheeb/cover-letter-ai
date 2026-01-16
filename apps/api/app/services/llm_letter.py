@@ -308,6 +308,22 @@ _PHONE_RE = re.compile(r"(?:\+?\d[\d\s().-]{6,}\d)")
 _ZIP_RE = re.compile(r"\b\d{4,5}\b")
 
 _SALUTATION_RE = re.compile(r"^\s*(sehr\s+geehrte|guten\s+tag|dear\b|hello\b)", re.IGNORECASE)
+_SIGNOFF_LINES = {
+    # German / Swiss German
+    "mit freundlichen grussen",
+    "freundliche grusse",
+    "mit besten grussen",
+    "beste grusse",
+    "viele grusse",
+    # English
+    "best regards",
+    "kind regards",
+    "sincerely",
+    "yours sincerely",
+    "yours faithfully",
+    "respectfully",
+    "respectfully yours",
+}
 _DE_HONORIFIC_NAME_RE = re.compile(
     r"\b(Frau|Herrn?|Herr)\s+([A-ZÄÖÜ][A-Za-zÄÖÜäöüß-]+(?:\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüß-]+){0,3})\b"
 )
@@ -353,6 +369,22 @@ def _looks_like_person_name(text: str) -> bool:
     return True
 
 
+def _normalize_signoff_line(value: str) -> str:
+    line = value.strip().strip(".,;:!,").casefold()
+    if not line:
+        return ""
+    line = line.replace("ß", "ss")
+    line = line.replace("ä", "a").replace("ö", "o").replace("ü", "u")
+    line = line.replace("ae", "a").replace("oe", "o").replace("ue", "u")
+    line = re.sub(r"\s+", " ", line).strip()
+    return line
+
+
+def _is_signoff_line(value: str) -> bool:
+    normalized = _normalize_signoff_line(value)
+    return normalized in _SIGNOFF_LINES
+
+
 def _strip_trailing_contact_block(*, body_paragraphs: list[str]) -> tuple[list[str], bool]:
     """
     Strip trailing signature/contact blocks (address/phone/email) if present.
@@ -374,6 +406,34 @@ def _strip_trailing_contact_block(*, body_paragraphs: list[str]) -> tuple[list[s
         removed += 1
 
     return body, bool(removed)
+
+
+def _strip_trailing_signoff_block(*, body_paragraphs: list[str]) -> tuple[list[str], bool]:
+    """
+    Strip trailing valedictions/signoffs (e.g., 'Mit freundlichen Grüssen', 'Sincerely').
+
+    Returns (cleaned_body, did_strip).
+    """
+    body = [p.strip() for p in body_paragraphs if p and p.strip()]
+    if not body:
+        return body, False
+
+    removed = False
+    while True:
+        changed = False
+        while body and _is_signoff_line(body[-1]):
+            body.pop()
+            removed = True
+            changed = True
+        if len(body) >= 2 and _looks_like_person_name(body[-1]) and _is_signoff_line(body[-2]):
+            body = body[:-2]
+            removed = True
+            changed = True
+            continue
+        if not changed:
+            break
+
+    return body, removed
 
 
 def _strip_trailing_recipient_block_from_body(
@@ -660,13 +720,15 @@ def _sanitize_letter(letter: LetterData) -> LetterData:
         body_paragraphs=letter.body_paragraphs, recipient_block=normalized_recipient_block
     )
     cleaned_body, did_strip_contact = _strip_trailing_contact_block(body_paragraphs=cleaned_body)
+    cleaned_body, did_strip_signoff = _strip_trailing_signoff_block(body_paragraphs=cleaned_body)
 
     # Keep schema constraints intact; if we over-cleaned, fall back to the original body.
     if len(cleaned_body) < 2:
         cleaned_body = [p.strip() for p in letter.body_paragraphs if p and p.strip()]
-        # If the original body ends with a contact block, try stripping it again (best-effort).
-        if did_strip_contact:
+        # If the original body ends with a contact/signoff block, try stripping again (best-effort).
+        if did_strip_contact or did_strip_signoff:
             cleaned_body, _ = _strip_trailing_contact_block(body_paragraphs=cleaned_body)
+            cleaned_body, _ = _strip_trailing_signoff_block(body_paragraphs=cleaned_body)
             if len(cleaned_body) < 2:
                 cleaned_body = [p.strip() for p in letter.body_paragraphs if p and p.strip()]
 
@@ -853,6 +915,7 @@ def generate_letter(*, job_text: str, cv_text: str, options: GenerateOptions, is
         "- Danach: 2-4 weitere Absätze mit konkretem Fit auf Aufgaben/Anforderungen, Beispiele aus CV.\n"
         "- WICHTIG: Wiederhole im Body KEINEN Empfängerblock und keine Adresszeilen.\n"
         "- WICHTIG: Keine Signatur-/Kontaktzeilen im Body (kein Name + Adresse + Telefon + E-Mail).\n"
+        "- WICHTIG: Keine Schlussformel im Body (z.B. 'Mit freundlichen Grüssen'); die Vorlage ergänzt den Abschluss.\n"
         "- Keine erfundenen Fakten; wenn etwas nicht im CV steht, nicht behaupten.\n"
         "- Response-Format für Ansprechperson: Wenn der Jobtext irgendwo einen Namen nennt, der als Kontakt/Empfang "
         "  für die Bewerbung dient (z.B. 'Frau Müller freut sich auf Deine Bewerbung', 'Ihre Kontaktperson: Herr Meier', "

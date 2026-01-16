@@ -37,8 +37,11 @@ class Settings(BaseSettings):
     google_places_language_code: str | None = Field(default=None)  # e.g., "de" for German
 
     # DOCX rendering
-    template_path: str | None = Field(default=None, description="Path to template.docx")
+    template_path: str | None = Field(default=None, description="Path to template_official.docx")
     recipient_address_indent_cm: float | None = Field(default=None)
+
+    # Internal auth (optional)
+    internal_api_token: str | None = Field(default=None)
 
     # Safety / robustness
     # Increased default timeout to accommodate tool calling with Responses API

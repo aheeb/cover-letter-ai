@@ -2,13 +2,16 @@
 
 import {
   AlertCircle,
+  Check,
   Download,
+  ExternalLink,
   FileText,
   Link as LinkIcon,
+  Loader2,
   Save,
   Sparkles,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -18,13 +21,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { FileUpload } from "@/components/ui/file-upload";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { getApiBaseUrl } from "@/lib/env";
+import { Badge } from "@/components/ui/badge";
 import { HttpError, fetchOk } from "@/lib/http";
 
 type Language = "de" | "en";
@@ -37,7 +41,7 @@ type PreviewState =
   | { status: "error"; message: string }
   | {
       status: "done";
-      letter: unknown; // LetterData from API
+      letter: unknown;
       dateLine: string;
       companyName: string;
       pdfBlobUrl: string;
@@ -59,7 +63,6 @@ function JobSection(props: {
 }) {
   const [activeTab, setActiveTab] = useState<"url" | "text">("url");
 
-  // Auto-switch tab if one input has content
   useEffect(() => {
     if (props.jobText && !props.jobUrl) setActiveTab("text");
     else if (props.jobUrl && !props.jobText) setActiveTab("url");
@@ -68,48 +71,50 @@ function JobSection(props: {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <Label className="text-base">Job Description</Label>
+        <Label className="text-sm font-medium">Job Source</Label>
         <TabsList>
           <TabsTrigger
             onClick={() => setActiveTab("url")}
             active={activeTab === "url"}
           >
-            <LinkIcon className="mr-2 h-3.5 w-3.5" />
-            Link
+            <LinkIcon className="mr-1.5 h-3.5 w-3.5" />
+            URL
           </TabsTrigger>
           <TabsTrigger
             onClick={() => setActiveTab("text")}
             active={activeTab === "text"}
           >
-            <FileText className="mr-2 h-3.5 w-3.5" />
-            Text
+            <FileText className="mr-1.5 h-3.5 w-3.5" />
+            Paste Text
           </TabsTrigger>
         </TabsList>
       </div>
 
       <div className={activeTab === "url" ? "block" : "hidden"}>
         <Input
-          placeholder="https://company.com/jobs/..."
+          placeholder="https://jobs.example.ch/position/..."
           value={props.jobUrl}
           onChange={(e) => props.setJobUrl(e.target.value)}
           autoFocus={activeTab === "url"}
+          className="font-mono text-sm"
         />
-        <p className="mt-2 text-xs text-zinc-500">
-          Paste the URL of the job posting. We'll extract the details
+        <p className="mt-2 text-xs text-muted-foreground">
+          Paste the URL of the job posting. We&apos;ll extract the details
           automatically.
         </p>
       </div>
 
       <div className={activeTab === "text" ? "block" : "hidden"}>
         <Textarea
-          placeholder="Paste the job description here..."
-          className="min-h-[120px]"
+          placeholder="Paste the full job description here..."
+          className="min-h-[140px] resize-none text-sm"
           value={props.jobText}
           onChange={(e) => props.setJobText(e.target.value)}
           autoFocus={activeTab === "text"}
         />
-        <p className="mt-2 text-xs text-zinc-500">
-          Fallback if scraping doesn't work or for internal documents.
+        <p className="mt-2 text-xs text-muted-foreground">
+          Use this if the job posting is behind a login or from an internal
+          document.
         </p>
       </div>
     </div>
@@ -130,14 +135,13 @@ function OptionsSection(props: {
 }) {
   return (
     <div className="space-y-4">
-      <Label className="text-base">Options</Label>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-3">
         <div className="space-y-2">
-          <Label className="text-xs text-zinc-500">Language</Label>
+          <Label className="text-xs text-muted-foreground">Language</Label>
           <Select
             value={props.language}
             onChange={(e) => props.setLanguage(e.target.value as Language)}
-            className="w-full min-w-[120px]"
+            className="w-full"
           >
             <option value="de">Deutsch</option>
             <option value="en">English</option>
@@ -145,11 +149,11 @@ function OptionsSection(props: {
         </div>
 
         <div className="space-y-2">
-          <Label className="text-xs text-zinc-500">Tone</Label>
+          <Label className="text-xs text-muted-foreground">Tone</Label>
           <Select
             value={props.tone}
             onChange={(e) => props.setTone(e.target.value as Tone)}
-            className="w-full min-w-[120px]"
+            className="w-full"
           >
             <option value="professional">Professional</option>
             <option value="friendly">Friendly</option>
@@ -158,11 +162,11 @@ function OptionsSection(props: {
         </div>
 
         <div className="space-y-2">
-          <Label className="text-xs text-zinc-500">Length</Label>
+          <Label className="text-xs text-muted-foreground">Length</Label>
           <Select
             value={props.length}
             onChange={(e) => props.setLength(e.target.value as Length)}
-            className="w-full min-w-[120px]"
+            className="w-full"
           >
             <option value="short">Short</option>
             <option value="medium">Medium</option>
@@ -171,26 +175,29 @@ function OptionsSection(props: {
         </div>
       </div>
 
-      <div className="space-y-2 pt-2">
+      <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <Label className="text-xs text-zinc-500">
-            Target Role (Optional)
+          <Label className="text-xs text-muted-foreground">
+            Target Role <span className="opacity-60">(optional)</span>
           </Label>
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            className="h-auto px-2 py-1 text-xs text-zinc-500 hover:text-zinc-900"
+            className="h-auto px-2 py-1 text-xs"
             onClick={props.onAutofillRole}
             disabled={props.isAutofilling}
           >
             {props.isAutofilling ? (
-              <span className="animate-pulse">Detecting...</span>
+              <span className="flex items-center gap-1.5">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Detecting...
+              </span>
             ) : (
-              <div className="flex items-center gap-1">
+              <span className="flex items-center gap-1.5">
                 <Sparkles className="h-3 w-3" />
-                <span>Auto-detect from URL</span>
-              </div>
+                Auto-detect
+              </span>
             )}
           </Button>
         </div>
@@ -198,6 +205,7 @@ function OptionsSection(props: {
           placeholder="e.g. Senior Software Engineer"
           value={props.targetRole}
           onChange={(e) => props.setTargetRole(e.target.value)}
+          className="text-sm"
         />
       </div>
     </div>
@@ -216,6 +224,14 @@ function getErrorMessage(err: unknown): string {
       ) {
         return (data as { detail: string }).detail;
       }
+      if (
+        typeof data === "object" &&
+        data !== null &&
+        "error" in data &&
+        typeof (data as { error?: unknown }).error === "string"
+      ) {
+        return (data as { error: string }).error;
+      }
     } catch {
       // ignore
     }
@@ -228,12 +244,10 @@ function getErrorMessage(err: unknown): string {
 }
 
 export function GeneratorForm() {
-  const apiBaseUrl = useMemo(() => getApiBaseUrl(), []);
   const pdfBlobUrlRef = useRef<string | null>(null);
 
   const [jobUrl, setJobUrl] = useState<string>("");
   const [jobText, setJobText] = useState<string>("");
-  const [cvFile, setCvFile] = useState<File | null>(null);
 
   const [language, setLanguage] = useState<Language>("de");
   const [tone, setTone] = useState<Tone>("professional");
@@ -266,7 +280,6 @@ export function GeneratorForm() {
       return;
     }
 
-    // Clean up previous preview
     if (previewState.status === "done" && pdfBlobUrlRef.current) {
       URL.revokeObjectURL(pdfBlobUrlRef.current);
       pdfBlobUrlRef.current = null;
@@ -275,7 +288,6 @@ export function GeneratorForm() {
     setPreviewState({ status: "loading" });
 
     const form = new FormData();
-    if (cvFile) form.append("cv_pdf", cvFile);
     if (jobUrl.trim().length > 0) form.append("job_url", jobUrl.trim());
     if (jobText.trim().length > 0) form.append("job_text", jobText.trim());
     form.append("language", language);
@@ -285,15 +297,13 @@ export function GeneratorForm() {
       form.append("target_role", targetRole.trim());
 
     try {
-      // Step 1: Generate letter data
-      const letterRes = await fetchOk(new URL("/v1/letter", apiBaseUrl), {
+      const letterRes = await fetchOk("/api/letter", {
         method: "POST",
         body: form,
       });
       const letterData = await letterRes.json();
 
-      // Step 2: Render PDF
-      const pdfRes = await fetchOk(new URL("/v1/render/pdf", apiBaseUrl), {
+      const pdfRes = await fetchOk("/api/render/pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -324,7 +334,7 @@ export function GeneratorForm() {
     if (previewState.status !== "done") return;
 
     try {
-      const res = await fetchOk(new URL("/v1/render/docx", apiBaseUrl), {
+      const res = await fetchOk("/api/render/docx", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -343,7 +353,6 @@ export function GeneratorForm() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (err) {
-      // Show error somehow - for now just log
       console.error("Failed to download DOCX:", err);
     }
   }
@@ -354,7 +363,6 @@ export function GeneratorForm() {
     setNotionSaveState({ status: "loading" });
 
     try {
-      // Convert PDF blob to File for upload
       const pdfBlob = await fetch(previewState.pdfBlobUrl).then((r) =>
         r.blob()
       );
@@ -362,8 +370,7 @@ export function GeneratorForm() {
         type: "application/pdf",
       });
 
-      // Fetch DOCX from API
-      const docxRes = await fetchOk(new URL("/v1/render/docx", apiBaseUrl), {
+      const docxRes = await fetchOk("/api/render/docx", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -426,7 +433,7 @@ export function GeneratorForm() {
     try {
       const form = new FormData();
       form.append("job_url", url);
-      const res = await fetchOk(new URL("/v1/job/preview", apiBaseUrl), {
+      const res = await fetchOk("/api/job/preview", {
         method: "POST",
         body: form,
       });
@@ -453,70 +460,26 @@ export function GeneratorForm() {
     }
   }
 
+  const isGenerating = previewState.status === "loading";
+
   return (
-    <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1.4fr_1fr]">
+    <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+      {/* Left Column: Inputs */}
       <div className="space-y-6">
-        {previewState.status === "error" && (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600 flex items-center gap-2">
-            <AlertCircle className="h-4 w-4" />
-            {previewState.message}
-          </div>
-        )}
-
-        {autofillState.status === "error" && (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600 flex items-center gap-2">
-            <AlertCircle className="h-4 w-4" />
-            {autofillState.message}
-          </div>
-        )}
-
-        {notionSaveState.status === "error" && (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600 flex items-center gap-2">
-            <AlertCircle className="h-4 w-4" />
-            {notionSaveState.message}
-          </div>
-        )}
-
-        {notionSaveState.status === "done" && (
-          <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700">
-            <p className="font-medium mb-2">Saved to Notion!</p>
-            <a
-              href={notionSaveState.notionPageUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:no-underline"
-            >
-              Open in Notion →
-            </a>
-          </div>
-        )}
-
-        {previewState.status === "done" && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Preview</CardTitle>
-              <CardDescription>
-                Review your cover letter before saving
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="border border-zinc-200 rounded-lg overflow-hidden">
-                <iframe
-                  src={previewState.pdfBlobUrl}
-                  className="w-full h-[600px]"
-                  title="Cover letter preview"
-                />
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
+        {/* Step 1: Job Details */}
         <Card>
           <CardHeader>
-            <CardTitle>Job Details</CardTitle>
-            <CardDescription>
-              Provide the job posting to tailor the letter.
-            </CardDescription>
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-medium">
+                1
+              </div>
+              <div>
+                <CardTitle className="text-lg">Job Details</CardTitle>
+                <CardDescription>
+                  Provide the job posting to tailor the letter.
+                </CardDescription>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             <JobSection
@@ -528,31 +491,22 @@ export function GeneratorForm() {
           </CardContent>
         </Card>
 
+        {/* Step 2: Configuration */}
         <Card>
           <CardHeader>
-            <CardTitle>Your CV</CardTitle>
-            <CardDescription>
-              Upload your CV (PDF) to extract your experience.
-            </CardDescription>
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-medium">
+                2
+              </div>
+              <div>
+                <CardTitle className="text-lg">Configuration</CardTitle>
+                <CardDescription>
+                  Customize the output to match your style.
+                </CardDescription>
+              </div>
+            </div>
           </CardHeader>
-          <CardContent>
-            <FileUpload
-              file={cvFile}
-              onFileSelect={setCvFile}
-              accept="application/pdf"
-              label="Upload CV (PDF)"
-              description="Drag & drop or click to browse"
-            />
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="space-y-6">
-        <Card className="h-full">
-          <CardHeader>
-            <CardTitle>Configuration</CardTitle>
-          </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-6">
             <OptionsSection
               language={language}
               setLanguage={setLanguage}
@@ -566,56 +520,167 @@ export function GeneratorForm() {
               isAutofilling={autofillState.status === "loading"}
             />
 
-            <div className="mt-8 pt-6 border-t border-zinc-100 space-y-3">
-              <Button
-                className="w-full h-12 text-base shadow-lg hover:shadow-xl transition-all"
-                onClick={onGeneratePreview}
-                disabled={previewState.status === "loading"}
-              >
-                {previewState.status === "loading" ? (
-                  <>
-                    <Sparkles className="mr-2 h-4 w-4 animate-spin" />
-                    Generating Preview...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    Generate Preview
-                  </>
-                )}
-              </Button>
+            {autofillState.status === "error" && (
+              <div className="flex items-center gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <p>{autofillState.message}</p>
+              </div>
+            )}
 
+            <Separator />
+
+            <Button
+              className="w-full"
+              size="lg"
+              onClick={onGeneratePreview}
+              disabled={isGenerating}
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Generate Cover Letter
+                </>
+              )}
+            </Button>
+
+            {previewState.status === "idle" && (
+              <p className="text-center text-xs text-muted-foreground">
+                Make sure you&apos;ve{" "}
+                <a
+                  href="/settings"
+                  className="text-primary underline underline-offset-4 hover:no-underline"
+                >
+                  uploaded your CV
+                </a>{" "}
+                first
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Right Column: Preview & Output */}
+      <div className="space-y-6 lg:sticky lg:top-6">
+        {/* Error Messages */}
+        {previewState.status === "error" && (
+          <div className="flex items-center gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+            <AlertCircle className="h-5 w-5 shrink-0" />
+            <p>{previewState.message}</p>
+          </div>
+        )}
+
+        {/* Notion Success */}
+        {notionSaveState.status === "done" && (
+          <div className="flex items-center justify-between rounded-lg border border-green-500/50 bg-green-500/10 p-4">
+            <div className="flex items-center gap-3 text-sm text-green-700">
+              <Check className="h-4 w-4 shrink-0" />
+              <p>Saved to Notion successfully!</p>
+            </div>
+            <a
+              href={notionSaveState.notionPageUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-green-700 hover:underline"
+            >
+              Open in Notion
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          </div>
+        )}
+
+        {/* Error for Notion */}
+        {notionSaveState.status === "error" && (
+          <div className="flex items-center gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <p>{notionSaveState.message}</p>
+          </div>
+        )}
+
+        {/* Preview Card */}
+        <Card className="overflow-hidden">
+          <CardHeader className="border-b bg-muted/40 py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <CardTitle className="text-lg">Preview</CardTitle>
+                {previewState.status === "done" && (
+                  <Badge variant="secondary" className="font-normal">
+                    {previewState.companyName}
+                  </Badge>
+                )}
+              </div>
               {previewState.status === "done" && (
-                <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                  <Button
-                    className="w-full"
-                    variant="outline"
-                    onClick={onDownloadDocx}
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    Download DOCX
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={onDownloadDocx}>
+                    <Download className="mr-1.5 h-3.5 w-3.5" />
+                    DOCX
                   </Button>
                   <Button
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                    size="sm"
                     onClick={onSaveToNotion}
                     disabled={notionSaveState.status === "loading"}
+                    className="bg-[#000] hover:bg-[#191919]"
                   >
                     {notionSaveState.status === "loading" ? (
                       <>
-                        <Sparkles className="mr-2 h-4 w-4 animate-spin" />
+                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                         Saving...
                       </>
                     ) : (
                       <>
-                        <Save className="mr-2 h-4 w-4" />
-                        Save to Notion
+                        <Save className="mr-1.5 h-3.5 w-3.5" />
+                        Notion
                       </>
                     )}
                   </Button>
                 </div>
               )}
             </div>
-          </CardContent>
+          </CardHeader>
+
+          {previewState.status === "idle" && (
+            <CardContent className="flex min-h-[500px] flex-col items-center justify-center bg-muted/20">
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted shadow-sm">
+                <FileText className="h-8 w-8 text-muted-foreground/40" />
+              </div>
+              <h3 className="mb-1 text-lg font-semibold">
+                Ready to generate
+              </h3>
+              <p className="max-w-xs text-center text-sm text-muted-foreground">
+                Fill in the job details on the left and click generate to create
+                your cover letter.
+              </p>
+            </CardContent>
+          )}
+
+          {previewState.status === "loading" && (
+            <CardContent className="flex min-h-[500px] flex-col items-center justify-center bg-muted/20">
+              <div className="relative mb-4">
+                <div className="h-12 w-12 rounded-full border-2 border-primary/20" />
+                <div className="absolute inset-0 h-12 w-12 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              </div>
+              <h3 className="mb-1 font-medium">
+                Generating your cover letter...
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                This may take a few seconds
+              </p>
+            </CardContent>
+          )}
+
+          {previewState.status === "done" && (
+            <div className="overflow-hidden bg-white">
+              <iframe
+                src={`${previewState.pdfBlobUrl}#navpanes=0&view=FitH`}
+                className="h-[700px] w-full"
+                title="Cover letter preview"
+              />
+            </div>
+          )}
         </Card>
       </div>
     </div>

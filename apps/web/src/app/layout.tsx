@@ -1,22 +1,31 @@
+import { ClerkProvider } from "@clerk/nextjs";
 import { cn } from "@/lib/utils";
-import { Inter } from "next/font/google";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
 import type { ReactNode } from "react";
+import type { Metadata } from "next";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+export const metadata: Metadata = {
+  title: "Cover Letter AI",
+  description: "Generate professional Swiss-style cover letters in minutes",
+};
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="de" suppressHydrationWarning className={inter.variable}>
-      <body
-        className={cn(
-          "min-h-screen bg-zinc-50 font-sans text-zinc-900 antialiased",
-          inter.className
-        )}
+    <ClerkProvider>
+      <html
+        lang="de"
         suppressHydrationWarning
+        className={cn(GeistSans.variable, GeistMono.variable)}
       >
-        {children}
-      </body>
-    </html>
+        <body
+          className="min-h-screen bg-background font-sans text-foreground antialiased"
+          suppressHydrationWarning
+        >
+          {children}
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }

@@ -179,7 +179,7 @@ async def generate(
 
     company_name = _company_name_for_filename(company=letter.company, recipient_block=letter.recipient_block)
     company_slug = ascii_slug(company_name)
-    filename = f"Motivationsschreiben_{company_slug}_Andri_Heeb.docx"
+    filename = f"Motivationsschreiben_{company_slug}.docx"
 
     duration_ms = int((perf_counter() - start) * 1000)
     logger.info(f"generate:done duration_ms={duration_ms}")

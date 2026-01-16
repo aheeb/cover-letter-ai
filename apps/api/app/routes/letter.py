@@ -136,8 +136,8 @@ async def letter(
 
     company_name = _company_name_for_filename(company=letter.company, recipient_block=letter.recipient_block)
     company_slug = ascii_slug(company_name)
-    docx_filename = f"Motivationsschreiben_{company_slug}_Andri_Heeb.docx"
-    pdf_filename = f"Motivationsschreiben_{company_slug}_Andri_Heeb.pdf"
+    docx_filename = f"Motivationsschreiben_{company_slug}.docx"
+    pdf_filename = f"Motivationsschreiben_{company_slug}.pdf"
 
     duration_ms = int((perf_counter() - start) * 1000)
     logger.info(f"letter:done duration_ms={duration_ms}")

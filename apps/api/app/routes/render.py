@@ -34,6 +34,9 @@ async def render_docx(request: RenderRequest) -> Response:
                 template_path=template_path,
                 letter=request.letter,
                 date_line=request.date_line,
+                sender_adress=request.sender_adress,
+                sender_name=request.sender_name,
+                location=request.location,
                 recipient_indent_cm=settings.recipient_address_indent_cm,
             )
         )
@@ -65,6 +68,9 @@ async def render_pdf(request: RenderRequest) -> Response:
                 template_path=template_path,
                 letter=request.letter,
                 date_line=request.date_line,
+                sender_adress=request.sender_adress,
+                sender_name=request.sender_name,
+                location=request.location,
                 recipient_indent_cm=settings.recipient_address_indent_cm,
             )
         )

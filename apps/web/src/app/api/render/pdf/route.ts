@@ -1,6 +1,7 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { formatSenderAddress, type SenderProfile } from "@/lib/sender";
+import { getApiBaseUrl } from "@/lib/env";
 
 type ProfileMetadata = {
   cover_letter?: {
@@ -95,19 +96,28 @@ export async function POST(request: Request) {
     location: senderProfile.location,
   };
 
-  const apiBaseUrl =
-    process.env.API_BASE_URL?.trim() ||
-    process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ||
-    "http://localhost:8000";
+  const apiBaseUrl = getApiBaseUrl();
 
-  const apiRes = await fetch(new URL("/v1/render/pdf", apiBaseUrl), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...getInternalTokenHeader(),
-    },
-    body: JSON.stringify(payload),
-  });
+  let apiRes: Response;
+  try {
+    apiRes = await fetch(new URL("/v1/render/pdf", apiBaseUrl), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getInternalTokenHeader(),
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    return NextResponse.json(
+      {
+        error: "Failed to reach API backend",
+        api_base_url: apiBaseUrl,
+        detail: err instanceof Error ? err.message : String(err),
+      },
+      { status: 502 }
+    );
+  }
 
   if (!apiRes.ok) {
     const bodyText = await apiRes.text();

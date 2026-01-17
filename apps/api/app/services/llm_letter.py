@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 
 from openai import OpenAI
 
@@ -117,6 +118,10 @@ def _normalize_text_for_matching(text: str) -> str:
 
     # Normalize German umlauts
     text = text.replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
+
+    # Strip accents for other languages (e.g., French/Italian)
+    text = unicodedata.normalize("NFD", text)
+    text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
 
     # Normalize street abbreviations
     text = re.sub(r'\bstr\.?\b', 'strasse', text)
@@ -323,12 +328,31 @@ _SIGNOFF_LINES = {
     "yours faithfully",
     "respectfully",
     "respectfully yours",
+    # French
+    "cordialement",
+    "bien cordialement",
+    "sincerement",
+    "sinceres salutations",
+    "salutations distinguees",
+    "meilleures salutations",
+    "avec mes salutations",
+    # Italian
+    "cordiali saluti",
+    "distinti saluti",
+    "porgo cordiali saluti",
+    "saluti cordiali",
 }
 _DE_HONORIFIC_NAME_RE = re.compile(
     r"\b(Frau|Herrn?|Herr)\s+([A-ZÄÖÜ][A-Za-zÄÖÜäöüß-]+(?:\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüß-]+){0,3})\b"
 )
 _EN_HONORIFIC_NAME_RE = re.compile(
     r"\b(Mr|Ms|Mrs|Dr)\.?\s+([A-Z][A-Za-z-]+(?:\s+[A-Z][A-Za-z-]+){0,2})\b"
+)
+_FR_HONORIFIC_NAME_RE = re.compile(
+    r"\b(Mme|Madame|Mlle|Mademoiselle|Monsieur|M\.|Mr)\.?\s+([A-ZÀ-ÖØ-Ý][A-Za-zÀ-ÖØ-öø-ÿ-]+(?:\s+[A-ZÀ-ÖØ-Ý][A-Za-zÀ-ÖØ-öø-ÿ-]+){0,2})\b"
+)
+_IT_HONORIFIC_NAME_RE = re.compile(
+    r"\b(Sig\.?ra|Sig\.?r|Sig\.?|Signora|Signor|Dott\.?ssa|Dott\.?|Ing\.?|Avv\.?)\s+([A-ZÀ-ÖØ-Ý][A-Za-zÀ-ÖØ-öø-ÿ-]+(?:\s+[A-ZÀ-ÖØ-Ý][A-Za-zÀ-ÖØ-öø-ÿ-]+){0,2})\b"
 )
 
 
@@ -341,6 +365,8 @@ def _looks_like_contact_paragraph(text: str) -> bool:
     if "e-mail" in t.lower() or "email" in t.lower():
         return True
     if "telefon" in t.lower() or "phone" in t.lower() or "tel." in t.lower():
+        return True
+    if "téléphone" in t.lower() or "telephone" in t.lower() or "telefono" in t.lower():
         return True
     if _PHONE_RE.search(t):
         return True
@@ -376,6 +402,8 @@ def _normalize_signoff_line(value: str) -> str:
     line = line.replace("ß", "ss")
     line = line.replace("ä", "a").replace("ö", "o").replace("ü", "u")
     line = line.replace("ae", "a").replace("oe", "o").replace("ue", "u")
+    line = unicodedata.normalize("NFD", line)
+    line = "".join(ch for ch in line if unicodedata.category(ch) != "Mn")
     line = re.sub(r"\s+", " ", line).strip()
     return line
 
@@ -492,6 +520,16 @@ def _best_effort_contact_from_job_text(*, job_text: str, language: Language) -> 
         "hiring",
         "talent",
         "hr",
+        "contact",
+        "candidature",
+        "postuler",
+        "poste",
+        "responsable",
+        "recrutement",
+        "risorse umane",
+        "selezione",
+        "candidatura",
+        "contatto",
         "freut sich",
         "freue mich",
         "auf deine bewerbung",
@@ -510,6 +548,19 @@ def _best_effort_contact_from_job_text(*, job_text: str, language: Language) -> 
             if m:
                 honorific = m.group(1).lower()
                 honorific = "herr" if honorific.startswith("herr") else "frau"
+                name = m.group(2).strip()
+                return honorific, name
+        elif language == Language.fr:
+            m = _FR_HONORIFIC_NAME_RE.search(line)
+            if m:
+                honorific = m.group(1).strip()
+                honorific = "M." if honorific.lower().startswith("m") and honorific.lower() not in {"mme", "madame", "mlle", "mademoiselle"} else honorific
+                name = m.group(2).strip()
+                return honorific, name
+        elif language == Language.it:
+            m = _IT_HONORIFIC_NAME_RE.search(line)
+            if m:
+                honorific = m.group(1).strip()
                 name = m.group(2).strip()
                 return honorific, name
         else:
@@ -536,6 +587,18 @@ def _honorific_from_gender(language: Language, gender: ContactGender) -> str | N
             return "frau"
         if gender == ContactGender.male:
             return "herr"
+        return None
+    if language == Language.fr:
+        if gender == ContactGender.female:
+            return "Mme"
+        if gender == ContactGender.male:
+            return "M."
+        return None
+    if language == Language.it:
+        if gender == ContactGender.female:
+            return "Sig.ra"
+        if gender == ContactGender.male:
+            return "Sig."
         return None
     if gender == ContactGender.female:
         return "Ms"
@@ -599,6 +662,10 @@ def _surname(name: str) -> str:
 def _default_salutation(language: Language) -> str:
     if language == Language.de:
         return "Sehr geehrte Damen und Herren"
+    if language == Language.fr:
+        return "Madame, Monsieur"
+    if language == Language.it:
+        return "Gentili Signore e Signori"
     return "Dear Sir or Madam"
 
 
@@ -610,6 +677,28 @@ def _salutation_from_contact(*, language: Language, honorific: str | None, name:
             return f"Sehr geehrter Herr {_surname(name)}"
         if name:
             return f"Guten Tag {name}"
+        return _default_salutation(language)
+
+    if language == Language.fr:
+        if honorific and name:
+            h = honorific.lower().replace(".", "")
+            if h in {"mme", "madame", "mlle", "mademoiselle"}:
+                return f"Madame {_surname(name)}"
+            if h in {"m", "monsieur", "mr"}:
+                return f"Monsieur {_surname(name)}"
+        if name:
+            return f"Bonjour {name}"
+        return _default_salutation(language)
+
+    if language == Language.it:
+        if honorific and name:
+            h = honorific.lower().replace(".", "")
+            if h in {"sigra", "signora"}:
+                return f"Gentile Signora {_surname(name)}"
+            if h in {"sigr", "sig", "signor"}:
+                return f"Gentile Signor {_surname(name)}"
+        if name:
+            return f"Gentile {name}"
         return _default_salutation(language)
 
     # English
@@ -630,6 +719,23 @@ def _ensure_salutation_comma(value: str) -> str:
     if not v.endswith(","):
         return f"{v},"
     return v
+
+
+def _strip_salutation_prefix(line: str, salutation: str) -> str | None:
+    if not line:
+        return None
+    trimmed = line.strip()
+    if not trimmed or not salutation:
+        return None
+    candidates = [salutation.strip(), _normalize_salutation_line(salutation)]
+    for candidate in candidates:
+        if not candidate:
+            continue
+        if trimmed.casefold().startswith(candidate.casefold()):
+            remainder = trimmed[len(candidate):].lstrip()
+            remainder = remainder.lstrip(",").lstrip()
+            return remainder
+    return None
 
 
 def _lowercase_first_word(value: str) -> str:
@@ -656,6 +762,20 @@ def _contact_line(*, name: str, gender: ContactGender, language: Language, honor
         if honorific_hint == "frau" or gender == ContactGender.female:
             return f"z. Hd. Frau {name}"
         return f"z. Hd. {name}"
+    if language == Language.fr:
+        h = (honorific_hint or "").lower().replace(".", "")
+        if h in {"mme", "madame", "mlle", "mademoiselle"} or gender == ContactGender.female:
+            return f"À l'attention de Mme {name}"
+        if h in {"m", "monsieur", "mr"} or gender == ContactGender.male:
+            return f"À l'attention de M. {name}"
+        return f"À l'attention de {name}"
+    if language == Language.it:
+        h = (honorific_hint or "").lower().replace(".", "")
+        if h in {"sigra", "signora"} or gender == ContactGender.female:
+            return f"All'attenzione di Sig.ra {name}"
+        if h in {"sigr", "sig", "signor"} or gender == ContactGender.male:
+            return f"All'attenzione di Sig. {name}"
+        return f"All'attenzione di {name}"
     # English
     if honorific_hint in {"Mr", "Ms", "Mrs"}:
         return f"Attn. {honorific_hint} {name}"
@@ -679,7 +799,7 @@ def _insert_contact_line_into_recipient_block(
 
 
 def _ensure_salutation_first_paragraph(
-    *, body_paragraphs: list[str], salutation: str
+    *, body_paragraphs: list[str], salutation: str, language: Language
 ) -> list[str]:
     body = [p.strip() for p in body_paragraphs if p and p.strip()]
     salutation = _ensure_salutation_comma(_normalize_salutation_line(salutation))
@@ -690,23 +810,14 @@ def _ensure_salutation_first_paragraph(
 
     first = body[0].strip()
 
-    # Always enforce the computed salutation as the first paragraph.
-    # If the model jammed salutation + content into one paragraph, keep the tail as the next paragraph.
-    tail = None
-    if "\n" in first:
-        _, tail = first.split("\n", 1)
-        tail = tail.strip() or None
-    elif "," in first:
-        _, tail = first.split(",", 1)
-        tail = tail.strip() or None
+    tail = _strip_salutation_prefix(first, salutation)
+    if tail is not None:
+        body = ([tail] if tail else []) + body[1:]
 
-    out: list[str] = [salutation]
-    if tail:
-        out.append(tail)
-    out.extend(body[1:])
+    out: list[str] = [salutation, *body]
 
     # Lowercase the first word of the first body paragraph (if present) per German letter conventions.
-    if len(out) >= 2:
+    if language == Language.de and len(out) >= 2:
         out[1] = _lowercase_first_word(out[1])
 
     return out
@@ -868,17 +979,56 @@ def generate_letter(*, job_text: str, cv_text: str, options: GenerateOptions, is
     client = OpenAI(api_key=settings.openai_api_key, timeout=settings.request_timeout_seconds)
     places_service = create_google_places_service(settings)
 
-    language_hint = "Deutsch (Schweiz)" if options.language == Language.de else "English"
+    language_hint = {
+        Language.de: "Deutsch (Schweiz)",
+        Language.en: "English",
+        Language.fr: "Français (Suisse)",
+        Language.it: "Italiano (Svizzera)",
+    }[options.language]
     tone_hint = {
-        "professional": "professionell, präzise, seriös",
-        "friendly": "professionell, freundlich, nahbar",
-        "concise": "sehr präzise und kurz, ohne Floskeln",
-    }[options.tone.value]
+        Language.de: {
+            "professional": "professionell, präzise, seriös",
+            "friendly": "professionell, freundlich, nahbar",
+            "concise": "sehr präzise und kurz, ohne Floskeln",
+        },
+        Language.en: {
+            "professional": "professional, precise, formal",
+            "friendly": "professional, friendly, approachable",
+            "concise": "very concise, no fluff",
+        },
+        Language.fr: {
+            "professional": "professionnel, précis, formel",
+            "friendly": "professionnel, chaleureux, accessible",
+            "concise": "très concis, sans fioritures",
+        },
+        Language.it: {
+            "professional": "professionale, preciso, formale",
+            "friendly": "professionale, cordiale, accessibile",
+            "concise": "molto conciso, senza fronzoli",
+        },
+    }[options.language][options.tone.value]
     length_hint = {
-        "short": "kurz",
-        "medium": "mittel",
-        "long": "lang",
-    }[options.length.value]
+        Language.de: {
+            "short": "kurz",
+            "medium": "mittel",
+            "long": "lang",
+        },
+        Language.en: {
+            "short": "short",
+            "medium": "medium",
+            "long": "long",
+        },
+        Language.fr: {
+            "short": "court",
+            "medium": "moyen",
+            "long": "long",
+        },
+        Language.it: {
+            "short": "breve",
+            "medium": "medio",
+            "long": "lungo",
+        },
+    }[options.language][options.length.value]
 
     target_role = options.target_role.strip() if options.target_role else ""
 
@@ -894,6 +1044,13 @@ def generate_letter(*, job_text: str, cv_text: str, options: GenerateOptions, is
     if target_role:
         dev_prompt += f"Zielrolle (falls Jobtext unklar): {target_role}\n"
 
+    salutation_examples = {
+        Language.de: "Sehr geehrte Frau Müller / Sehr geehrter Herr Meier / Sehr geehrte Damen und Herren",
+        Language.en: "Dear Ms Miller / Dear Mr Smith / Dear Sir or Madam",
+        Language.fr: "Madame Dupont / Monsieur Martin / Madame, Monsieur",
+        Language.it: "Gentile Signora Rossi / Gentile Signor Bianchi / Gentili Signore e Signori",
+    }[options.language]
+
     user_prompt = (
         "JOBBESCHREIBUNG (Text):\n"
         f"{job_text}\n\n"
@@ -908,9 +1065,9 @@ def generate_letter(*, job_text: str, cv_text: str, options: GenerateOptions, is
         "- Wenn Google Places nicht verfügbar ist oder keine guten Resultate liefert, "
         "  erstelle den Empfängerblock wie bisher aus dem Job-Text (2-3 Zeilen, OHNE Kommata).\n"
         "- Body: Beginne IMMER mit einer eigenen Anrede-Zeile als erstem Absatz.\n"
-        "  - Wenn im Jobtext eine konkrete Ansprechperson genannt ist (z.B. 'Frau Müller' oder 'Herr Meier'), "
-        "    verwende diese korrekt: 'Sehr geehrte Frau Müller' / 'Sehr geehrter Herr Meier'.\n"
-        "  - Wenn keine Ansprechperson explizit genannt ist: 'Sehr geehrte Damen und Herren'.\n"
+        "  - Wenn im Jobtext eine konkrete Ansprechperson genannt ist, verwende diese korrekt "
+        f"(z.B. {salutation_examples}).\n"
+        "  - Wenn keine Ansprechperson explizit genannt ist, nutze die neutrale Standard-Anrede der Sprache.\n"
         "  - Erfinde KEINE Ansprechperson und rate keine Namen.\n"
         "- Danach: 2-4 weitere Absätze mit konkretem Fit auf Aufgaben/Anforderungen, Beispiele aus CV.\n"
         "- WICHTIG: Wiederhole im Body KEINEN Empfängerblock und keine Adresszeilen.\n"
@@ -1208,7 +1365,11 @@ def generate_letter(*, job_text: str, cv_text: str, options: GenerateOptions, is
             job_text=job_text, language=options.language, contact_person=letter.contact_person
         )
         salutation = _salutation_from_contact(language=options.language, honorific=honorific, name=name)
-        body = _ensure_salutation_first_paragraph(body_paragraphs=letter.body_paragraphs, salutation=salutation)
+        body = _ensure_salutation_first_paragraph(
+            body_paragraphs=letter.body_paragraphs,
+            salutation=salutation,
+            language=options.language,
+        )
         contact_line = None
         if name:
             contact_line = _contact_line(

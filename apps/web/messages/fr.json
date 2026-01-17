@@ -1,0 +1,189 @@
+{
+  "brand": {
+    "name": "Cover Letter AI"
+  },
+  "actions": {
+    "signIn": "Se connecter",
+    "signUp": "S'inscrire",
+    "getStarted": "Commencer",
+    "goToApp": "Aller à l'app",
+    "viewPricing": "Voir les tarifs",
+    "saveDetails": "Enregistrer",
+    "saving": "Enregistrement...",
+    "uploadCv": "Téléverser le CV",
+    "uploading": "Téléversement...",
+    "uploadCvPdf": "Téléverser le CV (PDF)",
+    "browseHint": "Glissez-déposez ou cliquez pour parcourir"
+  },
+  "nav": {
+    "generate": "Générer une lettre",
+    "settings": "Paramètres",
+    "pricing": "Tarifs",
+    "navigationMenu": "Menu de navigation",
+    "openMenuAria": "Ouvrir le menu"
+  },
+  "language": {
+    "label": "Langue",
+    "names": {
+      "en": "Anglais",
+      "de": "Allemand",
+      "fr": "Français",
+      "it": "Italien"
+    }
+  },
+  "landing": {
+    "badge": "Lettres professionnelles au style suisse",
+    "headlineLine1": "Votre lettre de motivation,",
+    "headlineLine2": "Rédigée professionnellement",
+    "description": "Téléversez votre CV, collez le lien de l'offre et obtenez un document Word parfaitement formaté, prêt à envoyer. Conçu pour le marché suisse.",
+    "priceNote": "CHF 50/an · Résiliable à tout moment",
+    "howItWorks": "Comment ça marche",
+    "steps": {
+      "uploadTitle": "1. Téléversez votre CV",
+      "uploadDescription": "Téléversez votre CV une seule fois. Nous extrayons automatiquement votre expérience et vos compétences.",
+      "jobTitle": "2. Ajoutez les détails du poste",
+      "jobDescription": "Collez l'URL de l'annonce ou la description. Nous l'analysons pour adapter votre lettre.",
+      "downloadTitle": "3. Téléchargez et envoyez",
+      "downloadDescription": "Aperçu, modifiez si nécessaire, puis téléchargez votre fichier DOCX professionnel."
+    }
+  },
+  "onboarding": {
+    "title": "Bienvenue ! Mettons tout en place",
+    "subtitle": "Terminez ces étapes pour commencer à générer des lettres.",
+    "step1Title": "Choisissez votre offre",
+    "step1Description": "Accès annuel pour CHF 50",
+    "step2Title": "Configurez votre profil",
+    "step2Description": "Ajoutez votre CV et les informations de l'expéditeur",
+    "step3Title": "Générez des lettres",
+    "step3Description": "Créez un nombre illimité de lettres",
+    "stepUnavailable": "Disponible après abonnement",
+    "proTipLabel": "Astuce pro :",
+    "proTipBefore": "Vous pouvez déjà",
+    "proTipLink": "configurer votre profil",
+    "proTipAfter": "pendant que vous choisissez une offre."
+  },
+  "billing": {
+    "notConfiguredTitle": "Facturation non configurée",
+    "notConfiguredDescription": "Le plan de facturation n'a pas encore été configuré.",
+    "notConfiguredHelp": "Veuillez définir <id>CLERK_BILLING_PLAN_ID</id> ou <slug>CLERK_BILLING_PLAN_SLUG</slug> dans vos variables d'environnement."
+  },
+  "generator": {
+    "title": "Générer une lettre de motivation",
+    "description": "Ajoutez une offre d'emploi et nous créerons une lettre de motivation adaptée."
+  },
+  "generatorForm": {
+    "jobSection": {
+      "jobSourceLabel": "Source de l'offre",
+      "tabs": {
+        "url": "URL",
+        "pasteText": "Coller le texte"
+      },
+      "urlPlaceholder": "https://jobs.example.ch/position/...",
+      "urlHelp": "Collez l'URL de l'offre. Nous extrairons les détails automatiquement.",
+      "textPlaceholder": "Collez la description complète du poste ici...",
+      "textHelp": "Utilisez ceci si l'offre est derrière un accès ou provient d'un document interne."
+    },
+    "options": {
+      "languageLabel": "Langue",
+      "language": {
+        "de": "Allemand",
+        "en": "Anglais",
+        "fr": "Français",
+        "it": "Italien"
+      },
+      "toneLabel": "Ton",
+      "tone": {
+        "professional": "Professionnel",
+        "friendly": "Amical",
+        "concise": "Concis"
+      },
+      "lengthLabel": "Longueur",
+      "length": {
+        "short": "Court",
+        "medium": "Moyen",
+        "long": "Long"
+      },
+      "targetRole": {
+        "label": "Poste cible",
+        "optional": "(facultatif)",
+        "autoDetect": "Détecter automatiquement",
+        "detecting": "Détection...",
+        "placeholder": "ex. Ingénieur logiciel senior"
+      }
+    },
+    "steps": {
+      "jobDetails": {
+        "title": "Détails du poste",
+        "description": "Fournissez l'offre pour adapter la lettre."
+      },
+      "configuration": {
+        "title": "Configuration",
+        "description": "Personnalisez le résultat selon votre style."
+      }
+    },
+    "actions": {
+      "generate": "Générer la lettre de motivation",
+      "generating": "Génération..."
+    },
+    "hints": {
+      "uploadCv": "Assurez-vous d'avoir d'abord <link>téléversé votre CV</link>"
+    },
+    "errors": {
+      "missingJobDetails": "Veuillez fournir une URL ou un texte d'offre.",
+      "missingJobUrl": "Veuillez d'abord saisir une URL d'offre.",
+      "jobTextOverrides": "Un texte d'offre est défini – le poste en sera déduit.",
+      "roleDetectFailed": "Impossible de détecter le poste à partir de l'URL.",
+      "unknown": "Une erreur inconnue est survenue."
+    },
+    "notion": {
+      "saved": "Enregistré dans Notion avec succès !",
+      "open": "Ouvrir dans Notion",
+      "saving": "Enregistrement..."
+    },
+    "preview": {
+      "title": "Aperçu",
+      "readyTitle": "Prêt à générer",
+      "readyDescription": "Renseignez les détails du poste à gauche et cliquez sur générer pour créer votre lettre.",
+      "loadingTitle": "Génération de votre lettre...",
+      "loadingDescription": "Cela peut prendre quelques secondes",
+      "iframeTitle": "Aperçu de la lettre"
+    }
+  },
+  "settings": {
+    "title": "Paramètres",
+    "description": "Gérez votre profil et votre CV pour générer des lettres.",
+    "senderDetailsTitle": "Détails de l'expéditeur",
+    "senderDetailsDescription": "Votre adresse apparaît en haut de la lettre. Le lieu est utilisé pour la ligne de date.",
+    "cvUploadTitle": "Téléversement du CV",
+    "cvUploadDescription": "Téléversez votre CV au format PDF. Il sera utilisé pour générer des lettres personnalisées.",
+    "currentCv": "CV actuel :",
+    "field": {
+      "fullName": "Nom complet",
+      "streetAddress": "Adresse",
+      "postalCode": "Code postal",
+      "city": "Ville",
+      "country": "Pays",
+      "countryOptional": "(facultatif)",
+      "locationDateLine": "Lieu pour la ligne de date"
+    },
+    "placeholder": {
+      "name": "Max Muster",
+      "street": "Musterstrasse 12",
+      "postalCode": "8000",
+      "city": "Zurich",
+      "country": "Suisse",
+      "location": "Zurich"
+    },
+    "success": {
+      "profileSaved": "Profil enregistré avec succès.",
+      "cvUploaded": "CV téléversé avec succès."
+    },
+    "error": {
+      "unknown": "Une erreur inconnue est survenue."
+    }
+  },
+  "pricing": {
+    "title": "Tarifs",
+    "description": "Accès illimité pour générer des lettres de motivation professionnelles."
+  }
+}

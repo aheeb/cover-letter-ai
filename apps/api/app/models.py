@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field
 class Language(str, Enum):
     de = "de"
     en = "en"
+    fr = "fr"
+    it = "it"
 
 
 class Tone(str, Enum):
@@ -66,5 +68,6 @@ class RenderRequest(BaseModel):
     sender_adress: str = ""
     sender_name: str = ""
     location: str = ""
+    language: Language = Language.de
 
 

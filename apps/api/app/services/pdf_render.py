@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from app.models import LetterData
+from app.models import Language, LetterData
 from app.services.docx_render import render_letter_docx
 
 
@@ -21,6 +21,7 @@ def render_letter_pdf(
     sender_adress: str = "",
     sender_name: str = "",
     location: str = "",
+    language: Language = Language.de,
     recipient_indent_cm: float | None = None,
 ) -> bytes:
     """
@@ -46,6 +47,7 @@ def render_letter_pdf(
         sender_adress=sender_adress,
         sender_name=sender_name,
         location=location,
+        language=language,
         recipient_indent_cm=recipient_indent_cm,
     )
 

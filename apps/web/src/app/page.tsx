@@ -12,6 +12,9 @@ import {
 } from "@/components/ui/card";
 import Link from "next/link";
 import { FileText, Upload, Sparkles, Download, ArrowRight, CheckCircle2 } from "lucide-react";
+import { getTranslations } from "next-intl/server";
+
+type Translator = Awaited<ReturnType<typeof getTranslations>>;
 
 function getPlanIdentifier(): string | null {
   const planId = process.env.CLERK_BILLING_PLAN_ID?.trim();
@@ -28,7 +31,13 @@ async function isBypassUser(userId: string): Promise<boolean> {
   );
 }
 
-function LandingPage() {
+function LandingPage({
+  tLanding,
+  tActions,
+}: {
+  tLanding: Translator;
+  tActions: Translator;
+}) {
   return (
     <AppLayout showSidebar={false}>
       <main className="mx-auto w-full max-w-5xl px-4 py-16 sm:px-6 lg:py-24">
@@ -36,69 +45,73 @@ function LandingPage() {
         <div className="text-center">
           <div className="inline-flex items-center gap-2 rounded-full border bg-muted/50 px-4 py-1.5 text-sm text-muted-foreground mb-6">
             <Sparkles className="h-3.5 w-3.5" />
-            <span>Swiss-style professional letters</span>
+            <span>{tLanding("badge")}</span>
           </div>
           <h1 className="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
-            Your Cover Letter,
+            {tLanding("headlineLine1")}
             <br />
-            <span className="text-muted-foreground">Professionally Crafted</span>
+            <span className="text-muted-foreground">
+              {tLanding("headlineLine2")}
+            </span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground">
-            Upload your CV, paste the job link, and get a perfectly formatted
-            Word document ready to send. Built for the Swiss job market.
+            {tLanding("description")}
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <SignUpButton mode="modal">
               <Button size="lg" className="w-full sm:w-auto">
-                Get Started
+                {tActions("getStarted")}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </SignUpButton>
             <SignInButton mode="modal">
               <Button variant="outline" size="lg" className="w-full sm:w-auto">
-                Sign In
+                {tActions("signIn")}
               </Button>
             </SignInButton>
           </div>
           <p className="mt-4 text-sm text-muted-foreground">
-            CHF 50/year · Cancel anytime
+            {tLanding("priceNote")}
           </p>
         </div>
 
         {/* How it Works */}
         <div className="mt-24">
           <h2 className="text-center text-2xl font-semibold tracking-tight">
-            How It Works
+            {tLanding("howItWorks")}
           </h2>
           <div className="mt-12 grid gap-8 sm:grid-cols-3">
             <div className="relative">
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
                 <Upload className="h-5 w-5" />
               </div>
-              <h3 className="mt-4 text-lg font-semibold">1. Upload Your CV</h3>
+              <h3 className="mt-4 text-lg font-semibold">
+                {tLanding("steps.uploadTitle")}
+              </h3>
               <p className="mt-2 text-sm text-muted-foreground">
-                Upload your CV once. We extract your experience and skills
-                automatically.
+                {tLanding("steps.uploadDescription")}
               </p>
             </div>
             <div className="relative">
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
                 <FileText className="h-5 w-5" />
               </div>
-              <h3 className="mt-4 text-lg font-semibold">2. Add Job Details</h3>
+              <h3 className="mt-4 text-lg font-semibold">
+                {tLanding("steps.jobTitle")}
+              </h3>
               <p className="mt-2 text-sm text-muted-foreground">
-                Paste the job URL or description. We analyze it to tailor your
-                letter.
+                {tLanding("steps.jobDescription")}
               </p>
             </div>
             <div className="relative">
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
                 <Download className="h-5 w-5" />
               </div>
-              <h3 className="mt-4 text-lg font-semibold">3. Download & Send</h3>
+              <h3 className="mt-4 text-lg font-semibold">
+                {tLanding("steps.downloadTitle")}
+              </h3>
               <p className="mt-2 text-sm text-muted-foreground">
-                Preview, edit if needed, and download your professional DOCX
-                file.
+                {tLanding("steps.downloadDescription")}
               </p>
             </div>
           </div>
@@ -108,16 +121,22 @@ function LandingPage() {
   );
 }
 
-function OnboardingPage() {
+function OnboardingPage({
+  tOnboarding,
+  tActions,
+}: {
+  tOnboarding: Translator;
+  tActions: Translator;
+}) {
   return (
     <AppLayout>
       <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 lg:py-12">
         <div className="mb-8">
           <h1 className="text-2xl font-semibold tracking-tight">
-            Welcome! Let&apos;s get you set up
+            {tOnboarding("title")}
           </h1>
           <p className="mt-2 text-muted-foreground">
-            Complete these steps to start generating cover letters.
+            {tOnboarding("subtitle")}
           </p>
         </div>
 
@@ -130,9 +149,11 @@ function OnboardingPage() {
                   1
                 </div>
                 <div>
-                  <CardTitle className="text-base">Choose Your Plan</CardTitle>
+                  <CardTitle className="text-base">
+                    {tOnboarding("step1Title")}
+                  </CardTitle>
                   <CardDescription>
-                    Get yearly access for CHF 50
+                    {tOnboarding("step1Description")}
                   </CardDescription>
                 </div>
               </div>
@@ -140,7 +161,7 @@ function OnboardingPage() {
             <CardContent>
               <Button asChild>
                 <Link href="/pricing">
-                  View Pricing
+                  {tActions("viewPricing")}
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>
               </Button>
@@ -155,16 +176,18 @@ function OnboardingPage() {
                   2
                 </div>
                 <div>
-                  <CardTitle className="text-base">Set Up Your Profile</CardTitle>
+                  <CardTitle className="text-base">
+                    {tOnboarding("step2Title")}
+                  </CardTitle>
                   <CardDescription>
-                    Add your CV and sender details
+                    {tOnboarding("step2Description")}
                   </CardDescription>
                 </div>
               </div>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">
-                Available after subscribing
+                {tOnboarding("stepUnavailable")}
               </p>
             </CardContent>
           </Card>
@@ -177,16 +200,18 @@ function OnboardingPage() {
                   3
                 </div>
                 <div>
-                  <CardTitle className="text-base">Generate Letters</CardTitle>
+                  <CardTitle className="text-base">
+                    {tOnboarding("step3Title")}
+                  </CardTitle>
                   <CardDescription>
-                    Create unlimited cover letters
+                    {tOnboarding("step3Description")}
                   </CardDescription>
                 </div>
               </div>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">
-                Available after subscribing
+                {tOnboarding("stepUnavailable")}
               </p>
             </CardContent>
           </Card>
@@ -194,11 +219,17 @@ function OnboardingPage() {
 
         <div className="mt-6 rounded-lg border bg-muted/30 p-4">
           <p className="text-sm text-muted-foreground">
-            <strong className="text-foreground">Pro tip:</strong> You can already{" "}
-            <Link href="/settings" className="text-primary underline underline-offset-4 hover:no-underline">
-              set up your profile
+            <strong className="text-foreground">
+              {tOnboarding("proTipLabel")}
+            </strong>{" "}
+            {tOnboarding("proTipBefore")}{" "}
+            <Link
+              href="/settings"
+              className="text-primary underline underline-offset-4 hover:no-underline"
+            >
+              {tOnboarding("proTipLink")}
             </Link>{" "}
-            while deciding on a plan.
+            {tOnboarding("proTipAfter")}
           </p>
         </div>
       </div>
@@ -206,22 +237,31 @@ function OnboardingPage() {
   );
 }
 
-function BillingNotConfiguredPage() {
+function BillingNotConfiguredPage({ tBilling }: { tBilling: Translator }) {
   return (
     <AppLayout>
       <div className="mx-auto max-w-xl px-4 py-12 sm:px-6">
         <Card>
           <CardHeader>
-            <CardTitle>Billing Not Configured</CardTitle>
+            <CardTitle>{tBilling("notConfiguredTitle")}</CardTitle>
             <CardDescription>
-              The billing plan has not been set up yet.
+              {tBilling("notConfiguredDescription")}
             </CardDescription>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
             <p>
-              Please set <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">CLERK_BILLING_PLAN_ID</code> or{" "}
-              <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">CLERK_BILLING_PLAN_SLUG</code> in your
-              environment variables.
+              {tBilling.rich("notConfiguredHelp", {
+                id: (chunks) => (
+                  <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+                    {chunks}
+                  </code>
+                ),
+                slug: (chunks) => (
+                  <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+                    {chunks}
+                  </code>
+                ),
+              })}
             </p>
           </CardContent>
         </Card>
@@ -230,16 +270,16 @@ function BillingNotConfiguredPage() {
   );
 }
 
-function GeneratorPage() {
+function GeneratorPage({ tGenerator }: { tGenerator: Translator }) {
   return (
     <AppLayout>
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:py-8">
         <div className="mb-6">
           <h1 className="text-2xl font-semibold tracking-tight">
-            Generate Cover Letter
+            {tGenerator("title")}
           </h1>
           <p className="mt-1 text-muted-foreground">
-            Add a job posting and we&apos;ll create a tailored cover letter for you.
+            {tGenerator("description")}
           </p>
         </div>
         <GeneratorForm />
@@ -255,21 +295,27 @@ export default async function Page() {
   const hasPlan = Boolean(planIdentifier && has({ plan: planIdentifier }));
   const hasAccess = Boolean(userId && (bypass || hasPlan));
 
+  const tActions = await getTranslations("actions");
+  const tLanding = await getTranslations("landing");
+  const tOnboarding = await getTranslations("onboarding");
+  const tBilling = await getTranslations("billing");
+  const tGenerator = await getTranslations("generator");
+
   // Not signed in - show landing page
   if (!userId) {
-    return <LandingPage />;
+    return <LandingPage tLanding={tLanding} tActions={tActions} />;
   }
 
   // Signed in but billing not configured
   if (!bypass && !planIdentifier) {
-    return <BillingNotConfiguredPage />;
+    return <BillingNotConfiguredPage tBilling={tBilling} />;
   }
 
   // Signed in but no plan
   if (!hasAccess) {
-    return <OnboardingPage />;
+    return <OnboardingPage tOnboarding={tOnboarding} tActions={tActions} />;
   }
 
   // Has access - show generator
-  return <GeneratorPage />;
+  return <GeneratorPage tGenerator={tGenerator} />;
 }

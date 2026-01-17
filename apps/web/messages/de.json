@@ -1,0 +1,189 @@
+{
+  "brand": {
+    "name": "Cover Letter AI"
+  },
+  "actions": {
+    "signIn": "Anmelden",
+    "signUp": "Registrieren",
+    "getStarted": "Loslegen",
+    "goToApp": "Zur App",
+    "viewPricing": "Preise ansehen",
+    "saveDetails": "Details speichern",
+    "saving": "Speichern...",
+    "uploadCv": "Lebenslauf hochladen",
+    "uploading": "Lädt hoch...",
+    "uploadCvPdf": "Lebenslauf hochladen (PDF)",
+    "browseHint": "Per Drag & Drop hochladen oder klicken, um auszuwählen"
+  },
+  "nav": {
+    "generate": "Anschreiben erstellen",
+    "settings": "Einstellungen",
+    "pricing": "Preise",
+    "navigationMenu": "Navigationsmenü",
+    "openMenuAria": "Menü öffnen"
+  },
+  "language": {
+    "label": "Sprache",
+    "names": {
+      "en": "Englisch",
+      "de": "Deutsch",
+      "fr": "Französisch",
+      "it": "Italienisch"
+    }
+  },
+  "landing": {
+    "badge": "Professionelle Anschreiben im Schweizer Stil",
+    "headlineLine1": "Ihr Anschreiben,",
+    "headlineLine2": "Professionell formuliert",
+    "description": "Laden Sie Ihren Lebenslauf hoch, fügen Sie den Job-Link ein und erhalten Sie ein perfekt formatiertes Word-Dokument, bereit zum Versand. Für den Schweizer Arbeitsmarkt.",
+    "priceNote": "CHF 50/Jahr · Jederzeit kündbar",
+    "howItWorks": "So funktioniert es",
+    "steps": {
+      "uploadTitle": "1. Lebenslauf hochladen",
+      "uploadDescription": "Laden Sie Ihren Lebenslauf einmal hoch. Wir extrahieren automatisch Ihre Erfahrung und Fähigkeiten.",
+      "jobTitle": "2. Jobdetails hinzufügen",
+      "jobDescription": "Fügen Sie die Job-URL oder Beschreibung ein. Wir analysieren sie, um Ihr Anschreiben zu individualisieren.",
+      "downloadTitle": "3. Herunterladen & senden",
+      "downloadDescription": "Vorschau, bei Bedarf bearbeiten und Ihr professionelles DOCX herunterladen."
+    }
+  },
+  "onboarding": {
+    "title": "Willkommen! Lassen Sie uns starten",
+    "subtitle": "Schließen Sie diese Schritte ab, um Anschreiben zu erstellen.",
+    "step1Title": "Plan auswählen",
+    "step1Description": "Jährlicher Zugang für CHF 50",
+    "step2Title": "Profil einrichten",
+    "step2Description": "Fügen Sie Ihren Lebenslauf und Absenderdetails hinzu",
+    "step3Title": "Anschreiben erstellen",
+    "step3Description": "Erstellen Sie unbegrenzt Anschreiben",
+    "stepUnavailable": "Verfügbar nach dem Abonnement",
+    "proTipLabel": "Profi-Tipp:",
+    "proTipBefore": "Sie können bereits",
+    "proTipLink": "Ihr Profil einrichten",
+    "proTipAfter": "während Sie sich für einen Plan entscheiden."
+  },
+  "billing": {
+    "notConfiguredTitle": "Abrechnung nicht konfiguriert",
+    "notConfiguredDescription": "Der Abrechnungsplan wurde noch nicht eingerichtet.",
+    "notConfiguredHelp": "Bitte setzen Sie <id>CLERK_BILLING_PLAN_ID</id> oder <slug>CLERK_BILLING_PLAN_SLUG</slug> in Ihren Umgebungsvariablen."
+  },
+  "generator": {
+    "title": "Anschreiben erstellen",
+    "description": "Fügen Sie eine Stellenanzeige hinzu und wir erstellen ein maßgeschneidertes Anschreiben für Sie."
+  },
+  "generatorForm": {
+    "jobSection": {
+      "jobSourceLabel": "Jobquelle",
+      "tabs": {
+        "url": "URL",
+        "pasteText": "Text einfügen"
+      },
+      "urlPlaceholder": "https://jobs.example.ch/position/...",
+      "urlHelp": "Fügen Sie die URL der Stellenanzeige ein. Wir extrahieren die Details automatisch.",
+      "textPlaceholder": "Fügen Sie hier die vollständige Stellenbeschreibung ein...",
+      "textHelp": "Nutzen Sie dies, wenn die Stellenanzeige hinter einem Login liegt oder aus einem internen Dokument stammt."
+    },
+    "options": {
+      "languageLabel": "Sprache",
+      "language": {
+        "de": "Deutsch",
+        "en": "Englisch",
+        "fr": "Französisch",
+        "it": "Italienisch"
+      },
+      "toneLabel": "Ton",
+      "tone": {
+        "professional": "Professionell",
+        "friendly": "Freundlich",
+        "concise": "Prägnant"
+      },
+      "lengthLabel": "Länge",
+      "length": {
+        "short": "Kurz",
+        "medium": "Mittel",
+        "long": "Lang"
+      },
+      "targetRole": {
+        "label": "Zielposition",
+        "optional": "(optional)",
+        "autoDetect": "Automatisch erkennen",
+        "detecting": "Erkennen...",
+        "placeholder": "z.B. Senior Software Engineer"
+      }
+    },
+    "steps": {
+      "jobDetails": {
+        "title": "Jobdetails",
+        "description": "Geben Sie die Stellenanzeige an, damit wir das Anschreiben anpassen."
+      },
+      "configuration": {
+        "title": "Konfiguration",
+        "description": "Passen Sie die Ausgabe an Ihren Stil an."
+      }
+    },
+    "actions": {
+      "generate": "Anschreiben erstellen",
+      "generating": "Wird erstellt..."
+    },
+    "hints": {
+      "uploadCv": "Stellen Sie sicher, dass Sie zuerst <link>Ihren Lebenslauf hochgeladen</link> haben"
+    },
+    "errors": {
+      "missingJobDetails": "Bitte geben Sie entweder eine Job-URL oder einen Job-Text an.",
+      "missingJobUrl": "Bitte geben Sie zuerst eine Job-URL ein.",
+      "jobTextOverrides": "Job-Text ist gesetzt – die Rolle wird daraus abgeleitet.",
+      "roleDetectFailed": "Rolle konnte nicht aus der URL erkannt werden.",
+      "unknown": "Ein unbekannter Fehler ist aufgetreten."
+    },
+    "notion": {
+      "saved": "Erfolgreich in Notion gespeichert!",
+      "open": "In Notion öffnen",
+      "saving": "Speichern..."
+    },
+    "preview": {
+      "title": "Vorschau",
+      "readyTitle": "Bereit zum Erstellen",
+      "readyDescription": "Füllen Sie links die Jobdetails aus und klicken Sie auf Erstellen, um Ihr Anschreiben zu erzeugen.",
+      "loadingTitle": "Ihr Anschreiben wird erstellt...",
+      "loadingDescription": "Das kann ein paar Sekunden dauern",
+      "iframeTitle": "Anschreiben-Vorschau"
+    }
+  },
+  "settings": {
+    "title": "Einstellungen",
+    "description": "Verwalten Sie Ihr Profil und Ihren Lebenslauf für die Anschreibenerstellung.",
+    "senderDetailsTitle": "Absenderdetails",
+    "senderDetailsDescription": "Ihre Adresse erscheint oben im Anschreiben. Der Ort wird für die Datumszeile verwendet.",
+    "cvUploadTitle": "Lebenslauf hochladen",
+    "cvUploadDescription": "Laden Sie Ihren Lebenslauf als PDF hoch. Er wird für personalisierte Anschreiben verwendet.",
+    "currentCv": "Aktueller Lebenslauf:",
+    "field": {
+      "fullName": "Vollständiger Name",
+      "streetAddress": "Straße und Hausnummer",
+      "postalCode": "Postleitzahl",
+      "city": "Stadt",
+      "country": "Land",
+      "countryOptional": "(optional)",
+      "locationDateLine": "Ort für Datumszeile"
+    },
+    "placeholder": {
+      "name": "Max Muster",
+      "street": "Musterstrasse 12",
+      "postalCode": "8000",
+      "city": "Zürich",
+      "country": "Schweiz",
+      "location": "Zürich"
+    },
+    "success": {
+      "profileSaved": "Profil erfolgreich gespeichert.",
+      "cvUploaded": "Lebenslauf erfolgreich hochgeladen."
+    },
+    "error": {
+      "unknown": "Ein unbekannter Fehler ist aufgetreten."
+    }
+  },
+  "pricing": {
+    "title": "Preise",
+    "description": "Erhalten Sie unbegrenzten Zugriff, um professionelle Anschreiben zu erstellen."
+  }
+}

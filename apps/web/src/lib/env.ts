@@ -1,5 +1,7 @@
 export function getApiBaseUrl(): string {
-  const raw = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+  const raw =
+    process.env.API_BASE_URL?.trim() ||
+    process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
   if (raw && raw.length > 0) return raw;
 
   // If this is running on Vercel (i.e. a deployed frontend), never fall back to localhost.

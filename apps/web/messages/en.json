@@ -1,0 +1,189 @@
+{
+  "brand": {
+    "name": "Cover Letter AI"
+  },
+  "actions": {
+    "signIn": "Sign in",
+    "signUp": "Sign up",
+    "getStarted": "Get Started",
+    "goToApp": "Go to App",
+    "viewPricing": "View Pricing",
+    "saveDetails": "Save Details",
+    "saving": "Saving...",
+    "uploadCv": "Upload CV",
+    "uploading": "Uploading...",
+    "uploadCvPdf": "Upload CV (PDF)",
+    "browseHint": "Drag & drop or click to browse"
+  },
+  "nav": {
+    "generate": "Generate Letter",
+    "settings": "Settings",
+    "pricing": "Pricing",
+    "navigationMenu": "Navigation Menu",
+    "openMenuAria": "Open menu"
+  },
+  "language": {
+    "label": "Language",
+    "names": {
+      "en": "English",
+      "de": "Deutsch",
+      "fr": "Français",
+      "it": "Italiano"
+    }
+  },
+  "landing": {
+    "badge": "Swiss-style professional letters",
+    "headlineLine1": "Your Cover Letter,",
+    "headlineLine2": "Professionally Crafted",
+    "description": "Upload your CV, paste the job link, and get a perfectly formatted Word document ready to send. Built for the Swiss job market.",
+    "priceNote": "CHF 50/year · Cancel anytime",
+    "howItWorks": "How It Works",
+    "steps": {
+      "uploadTitle": "1. Upload Your CV",
+      "uploadDescription": "Upload your CV once. We extract your experience and skills automatically.",
+      "jobTitle": "2. Add Job Details",
+      "jobDescription": "Paste the job URL or description. We analyze it to tailor your letter.",
+      "downloadTitle": "3. Download & Send",
+      "downloadDescription": "Preview, edit if needed, and download your professional DOCX file."
+    }
+  },
+  "onboarding": {
+    "title": "Welcome! Let's get you set up",
+    "subtitle": "Complete these steps to start generating cover letters.",
+    "step1Title": "Choose Your Plan",
+    "step1Description": "Get yearly access for CHF 50",
+    "step2Title": "Set Up Your Profile",
+    "step2Description": "Add your CV and sender details",
+    "step3Title": "Generate Letters",
+    "step3Description": "Create unlimited cover letters",
+    "stepUnavailable": "Available after subscribing",
+    "proTipLabel": "Pro tip:",
+    "proTipBefore": "You can already",
+    "proTipLink": "set up your profile",
+    "proTipAfter": "while deciding on a plan."
+  },
+  "billing": {
+    "notConfiguredTitle": "Billing Not Configured",
+    "notConfiguredDescription": "The billing plan has not been set up yet.",
+    "notConfiguredHelp": "Please set <id>CLERK_BILLING_PLAN_ID</id> or <slug>CLERK_BILLING_PLAN_SLUG</slug> in your environment variables."
+  },
+  "generator": {
+    "title": "Generate Cover Letter",
+    "description": "Add a job posting and we'll create a tailored cover letter for you."
+  },
+  "generatorForm": {
+    "jobSection": {
+      "jobSourceLabel": "Job Source",
+      "tabs": {
+        "url": "URL",
+        "pasteText": "Paste Text"
+      },
+      "urlPlaceholder": "https://jobs.example.ch/position/...",
+      "urlHelp": "Paste the URL of the job posting. We'll extract the details automatically.",
+      "textPlaceholder": "Paste the full job description here...",
+      "textHelp": "Use this if the job posting is behind a login or from an internal document."
+    },
+    "options": {
+      "languageLabel": "Language",
+      "language": {
+        "de": "German",
+        "en": "English",
+        "fr": "French",
+        "it": "Italian"
+      },
+      "toneLabel": "Tone",
+      "tone": {
+        "professional": "Professional",
+        "friendly": "Friendly",
+        "concise": "Concise"
+      },
+      "lengthLabel": "Length",
+      "length": {
+        "short": "Short",
+        "medium": "Medium",
+        "long": "Long"
+      },
+      "targetRole": {
+        "label": "Target Role",
+        "optional": "(optional)",
+        "autoDetect": "Auto-detect",
+        "detecting": "Detecting...",
+        "placeholder": "e.g. Senior Software Engineer"
+      }
+    },
+    "steps": {
+      "jobDetails": {
+        "title": "Job Details",
+        "description": "Provide the job posting to tailor the letter."
+      },
+      "configuration": {
+        "title": "Configuration",
+        "description": "Customize the output to match your style."
+      }
+    },
+    "actions": {
+      "generate": "Generate Cover Letter",
+      "generating": "Generating..."
+    },
+    "hints": {
+      "uploadCv": "Make sure you've <link>uploaded your CV</link> first"
+    },
+    "errors": {
+      "missingJobDetails": "Please provide either a Job URL or Job Text.",
+      "missingJobUrl": "Please enter a Job URL first.",
+      "jobTextOverrides": "Job text is set – role will be derived from it.",
+      "roleDetectFailed": "Could not detect role from URL.",
+      "unknown": "An unknown error occurred."
+    },
+    "notion": {
+      "saved": "Saved to Notion successfully!",
+      "open": "Open in Notion",
+      "saving": "Saving..."
+    },
+    "preview": {
+      "title": "Preview",
+      "readyTitle": "Ready to generate",
+      "readyDescription": "Fill in the job details on the left and click generate to create your cover letter.",
+      "loadingTitle": "Generating your cover letter...",
+      "loadingDescription": "This may take a few seconds",
+      "iframeTitle": "Cover letter preview"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "description": "Manage your profile and CV for generating cover letters.",
+    "senderDetailsTitle": "Sender Details",
+    "senderDetailsDescription": "Your address appears at the top of the letter. The location is used for the date line.",
+    "cvUploadTitle": "CV Upload",
+    "cvUploadDescription": "Upload your CV as a PDF. It will be used to generate personalized cover letters.",
+    "currentCv": "Current CV:",
+    "field": {
+      "fullName": "Full Name",
+      "streetAddress": "Street Address",
+      "postalCode": "Postal Code",
+      "city": "City",
+      "country": "Country",
+      "countryOptional": "(optional)",
+      "locationDateLine": "Location for Date Line"
+    },
+    "placeholder": {
+      "name": "Max Muster",
+      "street": "Musterstrasse 12",
+      "postalCode": "8000",
+      "city": "Zürich",
+      "country": "Switzerland",
+      "location": "Zürich"
+    },
+    "success": {
+      "profileSaved": "Profile saved successfully.",
+      "cvUploaded": "CV uploaded successfully."
+    },
+    "error": {
+      "unknown": "An unknown error occurred."
+    }
+  },
+  "pricing": {
+    "title": "Pricing",
+    "description": "Get unlimited access to generate professional cover letters."
+  }
+}

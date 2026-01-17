@@ -13,11 +13,31 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm, Emu, Pt
 
-from app.models import LetterData
+from app.models import Language, LetterData
 
 
 class TemplateNotFoundError(RuntimeError):
     pass
+
+
+def _application_for(language: Language, role_title: str) -> str:
+    if language == Language.de:
+        return "Bewerbung als"
+    if language == Language.fr:
+        return "Candidature pour"
+    if language == Language.it:
+        return "Candidatura per"
+    return "Application for"
+
+
+def _default_signoff(language: Language) -> str:
+    if language == Language.de:
+        return "Freundliche Grüsse"
+    if language == Language.fr:
+        return "Cordialement"
+    if language == Language.it:
+        return "Cordiali saluti"
+    return "Kind regards"
 
 
 def render_letter_docx(
@@ -28,14 +48,17 @@ def render_letter_docx(
     sender_adress: str = "",
     sender_name: str = "",
     location: str = "",
+    language: Language = Language.de,
     recipient_indent_cm: float | None = None,
 ) -> bytes:
     if not template_path.exists():
         raise TemplateNotFoundError(f"Template not found: {template_path}")
 
+    body_paragraphs = [p.strip() for p in letter.body_paragraphs if p and p.strip()]
+
     # Docxtpl supports paragraph breaks using the ASCII bell character (\a) via `Listing`.
     # This is the most reliable way to render multi-paragraph bodies into a single placeholder.
-    body_listing = Listing("\a".join(letter.body_paragraphs))
+    body_listing = Listing("\a".join(body_paragraphs))
 
     recipient_lines = [ln.strip() for ln in letter.recipient_block.splitlines() if ln.strip()]
     recipient_listing = Listing("\a".join(recipient_lines)) if recipient_lines else letter.recipient_block
@@ -43,11 +66,15 @@ def render_letter_docx(
     sender_lines = [ln.strip() for ln in sender_adress.splitlines() if ln.strip()]
     sender_listing = Listing("\a".join(sender_lines)) if sender_lines else sender_adress
 
+    role_value = letter.role_title.strip()
+
     context: dict[str, object] = {
         # Template placeholders (as provided by user):
         "date": date_line,
         "recipient_address": recipient_listing,
-        "role": letter.role_title,
+        "application_for": _application_for(language, letter.role_title),
+        "greetings": _default_signoff(language),
+        "role": role_value,
         "body_of_motivational_letter": body_listing,
         "sender_adress": sender_listing,
         "sender_address": sender_listing,
@@ -57,7 +84,7 @@ def render_letter_docx(
         # Backwards-compatible keys (safe to keep):
         "date_line": date_line,
         "company": letter.company,
-        "role_title": letter.role_title,
+        "role_title": role_value,
         "recipient_block": letter.recipient_block,
         "body_paragraphs": letter.body_paragraphs,
         "body_listing": body_listing,

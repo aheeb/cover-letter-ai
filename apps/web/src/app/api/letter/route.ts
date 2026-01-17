@@ -1,6 +1,7 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { UTApi } from "uploadthing/server";
 import { NextResponse } from "next/server";
+import { getApiBaseUrl } from "@/lib/env";
 
 type ProfileMetadata = {
   cover_letter?: {
@@ -20,9 +21,15 @@ type ProfileMetadata = {
   };
 };
 
-const utapi = new UTApi({
-  token: process.env.UPLOADTHING_TOKEN,
-});
+function requireUploadthing(): UTApi {
+  const token = process.env.UPLOADTHING_TOKEN?.trim();
+  if (!token) {
+    throw new Error(
+      "UPLOADTHING_TOKEN is not configured (required to sign stored CV fileKey URLs)."
+    );
+  }
+  return new UTApi({ token });
+}
 
 function getPlanSlug(): string | null {
   const planId = process.env.CLERK_BILLING_PLAN_ID?.trim();
@@ -44,7 +51,10 @@ function getInternalTokenHeader(): Record<string, string> {
   return token ? { "X-Internal-Token": token } : {};
 }
 
-async function getCvFile(userId: string, incomingFile?: File | null): Promise<File | null> {
+async function getCvFile(
+  userId: string,
+  incomingFile?: File | null
+): Promise<File | null> {
   if (incomingFile) return incomingFile;
 
   const client = await clerkClient();
@@ -57,10 +67,15 @@ async function getCvFile(userId: string, incomingFile?: File | null): Promise<Fi
 
   const url = fileUrl
     ? fileUrl
-    : (await utapi.generateSignedURL(fileKey!, { expiresIn: "15 minutes" })).ufsUrl;
-  const res = await fetch(url);
+    : (
+        await requireUploadthing().generateSignedURL(fileKey!, {
+          expiresIn: "15 minutes",
+        })
+      ).ufsUrl;
+
+  const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {
-    throw new Error("Failed to fetch CV file");
+    throw new Error(`Failed to fetch CV file (HTTP ${res.status})`);
   }
   const blob = await res.blob();
   return new File([blob], fileName, { type: "application/pdf" });
@@ -94,13 +109,6 @@ export async function POST(request: Request) {
   const incomingFile =
     incomingCv instanceof File && incomingCv.size > 0 ? incomingCv : null;
 
-  if (!incomingFile && !process.env.UPLOADTHING_TOKEN) {
-    return NextResponse.json(
-      { error: "UPLOADTHING_TOKEN is not configured" },
-      { status: 500 }
-    );
-  }
-
   let cvFile: File | null = null;
   try {
     cvFile = await getCvFile(userId, incomingFile);
@@ -129,18 +137,27 @@ export async function POST(request: Request) {
     }
   }
 
-  const apiBaseUrl =
-    process.env.API_BASE_URL?.trim() ||
-    process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ||
-    "http://localhost:8000";
+  const apiBaseUrl = getApiBaseUrl();
 
-  const apiRes = await fetch(new URL("/v1/letter", apiBaseUrl), {
-    method: "POST",
-    headers: {
-      ...getInternalTokenHeader(),
-    },
-    body: apiForm,
-  });
+  let apiRes: Response;
+  try {
+    apiRes = await fetch(new URL("/v1/letter", apiBaseUrl), {
+      method: "POST",
+      headers: {
+        ...getInternalTokenHeader(),
+      },
+      body: apiForm,
+    });
+  } catch (err) {
+    return NextResponse.json(
+      {
+        error: "Failed to reach API backend",
+        api_base_url: apiBaseUrl,
+        detail: err instanceof Error ? err.message : String(err),
+      },
+      { status: 502 }
+    );
+  }
 
   if (!apiRes.ok) {
     const bodyText = await apiRes.text();

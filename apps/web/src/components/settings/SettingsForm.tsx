@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { AlertCircle, CheckCircle2, Upload, User } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -32,12 +33,15 @@ type SettingsFormProps = {
   initialData: ProfileResponse;
 };
 
-function getErrorMessage(err: unknown): string {
+function getErrorMessage(
+  err: unknown,
+  tSettings: (key: string) => string
+): string {
   if (err instanceof HttpError) {
     return err.bodyText ? `HTTP ${err.status}: ${err.bodyText}` : `HTTP ${err.status}`;
   }
   if (err instanceof Error) return err.message;
-  return "An unknown error occurred.";
+  return tSettings("error.unknown");
 }
 
 function SettingsSkeleton() {
@@ -73,6 +77,9 @@ const profileFetcher = async (url: string): Promise<ProfileResponse> => {
 };
 
 export function SettingsForm({ initialData }: SettingsFormProps) {
+  const tSettings = useTranslations("settings");
+  const tActions = useTranslations("actions");
+
   const { data, error, isLoading, mutate } = useSWR<ProfileResponse>(
     "/api/profile/address",
     profileFetcher,
@@ -104,9 +111,9 @@ export function SettingsForm({ initialData }: SettingsFormProps) {
 
   useEffect(() => {
     if (error) {
-      setErrorMessage(getErrorMessage(error));
+      setErrorMessage(getErrorMessage(error, tSettings));
     }
-  }, [error]);
+  }, [error, tSettings]);
 
   const updateSender = (updates: Partial<SenderProfile>) => {
     setIsDirty(true);
@@ -134,10 +141,10 @@ export function SettingsForm({ initialData }: SettingsFormProps) {
       await mutate(nextData, false);
       setSender(payload.sender);
       setIsDirty(false);
-      setSuccessMessage("Profile saved successfully.");
+      setSuccessMessage(tSettings("success.profileSaved"));
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
-      setErrorMessage(getErrorMessage(err));
+      setErrorMessage(getErrorMessage(err, tSettings));
     } finally {
       setSaving(false);
     }
@@ -166,10 +173,10 @@ export function SettingsForm({ initialData }: SettingsFormProps) {
       await mutate(nextData, false);
       setCvFilename(payload.fileName);
       setCvFile(null);
-      setSuccessMessage("CV uploaded successfully.");
+      setSuccessMessage(tSettings("success.cvUploaded"));
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
-      setErrorMessage(getErrorMessage(err));
+      setErrorMessage(getErrorMessage(err, tSettings));
     } finally {
       setUploading(false);
     }
@@ -183,9 +190,11 @@ export function SettingsForm({ initialData }: SettingsFormProps) {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {tSettings("title")}
+        </h1>
         <p className="mt-1 text-muted-foreground">
-          Manage your profile and CV for generating cover letters.
+          {tSettings("description")}
         </p>
       </div>
 
@@ -212,10 +221,11 @@ export function SettingsForm({ initialData }: SettingsFormProps) {
               <User className="h-5 w-5 text-muted-foreground" />
             </div>
             <div>
-              <CardTitle className="text-lg">Sender Details</CardTitle>
+            <CardTitle className="text-lg">
+              {tSettings("senderDetailsTitle")}
+            </CardTitle>
               <CardDescription>
-                Your address appears at the top of the letter. The location is
-                used for the date line.
+              {tSettings("senderDetailsDescription")}
               </CardDescription>
             </div>
           </div>
@@ -223,66 +233,73 @@ export function SettingsForm({ initialData }: SettingsFormProps) {
         <CardContent className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="name">Full Name</Label>
+              <Label htmlFor="name">{tSettings("field.fullName")}</Label>
               <Input
                 id="name"
                 value={sender.name}
                 onChange={(e) => updateSender({ name: e.target.value })}
-                placeholder="Max Muster"
+                placeholder={tSettings("placeholder.name")}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="street">Street Address</Label>
+              <Label htmlFor="street">{tSettings("field.streetAddress")}</Label>
               <Input
                 id="street"
                 value={sender.street}
                 onChange={(e) => updateSender({ street: e.target.value })}
-                placeholder="Musterstrasse 12"
+                placeholder={tSettings("placeholder.street")}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="postalCode">Postal Code</Label>
+              <Label htmlFor="postalCode">
+                {tSettings("field.postalCode")}
+              </Label>
               <Input
                 id="postalCode"
                 value={sender.postalCode}
                 onChange={(e) => updateSender({ postalCode: e.target.value })}
-                placeholder="8000"
+                placeholder={tSettings("placeholder.postalCode")}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="city">City</Label>
+              <Label htmlFor="city">{tSettings("field.city")}</Label>
               <Input
                 id="city"
                 value={sender.city}
                 onChange={(e) => updateSender({ city: e.target.value })}
-                placeholder="Zürich"
+                placeholder={tSettings("placeholder.city")}
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="country">
-                Country <span className="text-muted-foreground">(optional)</span>
+                {tSettings("field.country")}{" "}
+                <span className="text-muted-foreground">
+                  {tSettings("field.countryOptional")}
+                </span>
               </Label>
               <Input
                 id="country"
                 value={sender.country}
                 onChange={(e) => updateSender({ country: e.target.value })}
-                placeholder="Switzerland"
+                placeholder={tSettings("placeholder.country")}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="location">Location for Date Line</Label>
+              <Label htmlFor="location">
+                {tSettings("field.locationDateLine")}
+              </Label>
               <Input
                 id="location"
                 value={sender.location}
                 onChange={(e) => updateSender({ location: e.target.value })}
-                placeholder="Zürich"
+                placeholder={tSettings("placeholder.location")}
               />
             </div>
           </div>
           <Separator />
           <div className="flex justify-end">
             <Button onClick={onSaveProfile} disabled={saving}>
-              {saving ? "Saving..." : "Save Details"}
+              {saving ? tActions("saving") : tActions("saveDetails")}
             </Button>
           </div>
         </CardContent>
@@ -296,10 +313,11 @@ export function SettingsForm({ initialData }: SettingsFormProps) {
               <Upload className="h-5 w-5 text-muted-foreground" />
             </div>
             <div>
-              <CardTitle className="text-lg">CV Upload</CardTitle>
+              <CardTitle className="text-lg">
+                {tSettings("cvUploadTitle")}
+              </CardTitle>
               <CardDescription>
-                Upload your CV as a PDF. It will be used to generate personalized
-                cover letters.
+                {tSettings("cvUploadDescription")}
               </CardDescription>
             </div>
           </div>
@@ -309,7 +327,8 @@ export function SettingsForm({ initialData }: SettingsFormProps) {
             <div className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3">
               <CheckCircle2 className="h-4 w-4 text-green-600" />
               <span className="text-sm">
-                Current CV: <span className="font-medium">{cvFilename}</span>
+                {tSettings("currentCv")}{" "}
+                <span className="font-medium">{cvFilename}</span>
               </span>
             </div>
           )}
@@ -317,12 +336,12 @@ export function SettingsForm({ initialData }: SettingsFormProps) {
             file={cvFile}
             onFileSelect={setCvFile}
             accept="application/pdf"
-            label="Upload CV (PDF)"
-            description="Drag & drop or click to browse"
+            label={tActions("uploadCvPdf")}
+            description={tActions("browseHint")}
           />
           <div className="flex justify-end">
             <Button onClick={onUploadCv} disabled={!cvFile || uploading}>
-              {uploading ? "Uploading..." : "Upload CV"}
+              {uploading ? tActions("uploading") : tActions("uploadCv")}
             </Button>
           </div>
         </CardContent>

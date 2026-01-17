@@ -1,5 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import { getApiBaseUrl } from "@/lib/env";
 
 function getInternalTokenHeader(): Record<string, string> {
   const token = process.env.INTERNAL_API_TOKEN?.trim();
@@ -24,18 +25,27 @@ export async function POST(request: Request) {
   const apiForm = new FormData();
   apiForm.append("job_url", jobUrl.trim());
 
-  const apiBaseUrl =
-    process.env.API_BASE_URL?.trim() ||
-    process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ||
-    "http://localhost:8000";
+  const apiBaseUrl = getApiBaseUrl();
 
-  const apiRes = await fetch(new URL("/v1/job/preview", apiBaseUrl), {
-    method: "POST",
-    headers: {
-      ...getInternalTokenHeader(),
-    },
-    body: apiForm,
-  });
+  let apiRes: Response;
+  try {
+    apiRes = await fetch(new URL("/v1/job/preview", apiBaseUrl), {
+      method: "POST",
+      headers: {
+        ...getInternalTokenHeader(),
+      },
+      body: apiForm,
+    });
+  } catch (err) {
+    return NextResponse.json(
+      {
+        error: "Failed to reach API backend",
+        api_base_url: apiBaseUrl,
+        detail: err instanceof Error ? err.message : String(err),
+      },
+      { status: 502 }
+    );
+  }
 
   if (!apiRes.ok) {
     const bodyText = await apiRes.text();

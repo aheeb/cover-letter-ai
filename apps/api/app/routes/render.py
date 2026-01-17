@@ -37,6 +37,7 @@ async def render_docx(request: RenderRequest) -> Response:
                 sender_adress=request.sender_adress,
                 sender_name=request.sender_name,
                 location=request.location,
+                language=request.language,
                 recipient_indent_cm=settings.recipient_address_indent_cm,
             )
         )
@@ -71,6 +72,7 @@ async def render_pdf(request: RenderRequest) -> Response:
                 sender_adress=request.sender_adress,
                 sender_name=request.sender_name,
                 location=request.location,
+                language=request.language,
                 recipient_indent_cm=settings.recipient_address_indent_cm,
             )
         )

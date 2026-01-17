@@ -12,6 +12,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -31,7 +32,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { HttpError, fetchOk } from "@/lib/http";
 
-type Language = "de" | "en";
+type Language = "de" | "en" | "fr" | "it";
 type Tone = "professional" | "friendly" | "concise";
 type Length = "short" | "medium" | "long";
 
@@ -47,6 +48,7 @@ type PreviewState =
       pdfBlobUrl: string;
       pdfFilename: string;
       docxFilename: string;
+      language: Language;
     };
 
 type NotionSaveState =
@@ -61,6 +63,7 @@ function JobSection(props: {
   jobText: string;
   setJobText: (value: string) => void;
 }) {
+  const t = useTranslations("generatorForm");
   const [activeTab, setActiveTab] = useState<"url" | "text">("url");
 
   useEffect(() => {
@@ -71,50 +74,50 @@ function JobSection(props: {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <Label className="text-sm font-medium">Job Source</Label>
+        <Label className="text-sm font-medium">
+          {t("jobSection.jobSourceLabel")}
+        </Label>
         <TabsList>
           <TabsTrigger
             onClick={() => setActiveTab("url")}
             active={activeTab === "url"}
           >
             <LinkIcon className="mr-1.5 h-3.5 w-3.5" />
-            URL
+            {t("jobSection.tabs.url")}
           </TabsTrigger>
           <TabsTrigger
             onClick={() => setActiveTab("text")}
             active={activeTab === "text"}
           >
             <FileText className="mr-1.5 h-3.5 w-3.5" />
-            Paste Text
+            {t("jobSection.tabs.pasteText")}
           </TabsTrigger>
         </TabsList>
       </div>
 
       <div className={activeTab === "url" ? "block" : "hidden"}>
         <Input
-          placeholder="https://jobs.example.ch/position/..."
+          placeholder={t("jobSection.urlPlaceholder")}
           value={props.jobUrl}
           onChange={(e) => props.setJobUrl(e.target.value)}
           autoFocus={activeTab === "url"}
           className="font-mono text-sm"
         />
         <p className="mt-2 text-xs text-muted-foreground">
-          Paste the URL of the job posting. We&apos;ll extract the details
-          automatically.
+          {t("jobSection.urlHelp")}
         </p>
       </div>
 
       <div className={activeTab === "text" ? "block" : "hidden"}>
         <Textarea
-          placeholder="Paste the full job description here..."
+          placeholder={t("jobSection.textPlaceholder")}
           className="min-h-[140px] resize-none text-sm"
           value={props.jobText}
           onChange={(e) => props.setJobText(e.target.value)}
           autoFocus={activeTab === "text"}
         />
         <p className="mt-2 text-xs text-muted-foreground">
-          Use this if the job posting is behind a login or from an internal
-          document.
+          {t("jobSection.textHelp")}
         </p>
       </div>
     </div>
@@ -133,44 +136,53 @@ function OptionsSection(props: {
   onAutofillRole: () => void;
   isAutofilling: boolean;
 }) {
+  const t = useTranslations("generatorForm");
   return (
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">Language</Label>
+          <Label className="text-xs text-muted-foreground">
+            {t("options.languageLabel")}
+          </Label>
           <Select
             value={props.language}
             onChange={(e) => props.setLanguage(e.target.value as Language)}
             className="w-full"
           >
-            <option value="de">Deutsch</option>
-            <option value="en">English</option>
+            <option value="de">{t("options.language.de")}</option>
+            <option value="en">{t("options.language.en")}</option>
+            <option value="fr">{t("options.language.fr")}</option>
+            <option value="it">{t("options.language.it")}</option>
           </Select>
         </div>
 
         <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">Tone</Label>
+          <Label className="text-xs text-muted-foreground">
+            {t("options.toneLabel")}
+          </Label>
           <Select
             value={props.tone}
             onChange={(e) => props.setTone(e.target.value as Tone)}
             className="w-full"
           >
-            <option value="professional">Professional</option>
-            <option value="friendly">Friendly</option>
-            <option value="concise">Concise</option>
+            <option value="professional">{t("options.tone.professional")}</option>
+            <option value="friendly">{t("options.tone.friendly")}</option>
+            <option value="concise">{t("options.tone.concise")}</option>
           </Select>
         </div>
 
         <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">Length</Label>
+          <Label className="text-xs text-muted-foreground">
+            {t("options.lengthLabel")}
+          </Label>
           <Select
             value={props.length}
             onChange={(e) => props.setLength(e.target.value as Length)}
             className="w-full"
           >
-            <option value="short">Short</option>
-            <option value="medium">Medium</option>
-            <option value="long">Long</option>
+            <option value="short">{t("options.length.short")}</option>
+            <option value="medium">{t("options.length.medium")}</option>
+            <option value="long">{t("options.length.long")}</option>
           </Select>
         </div>
       </div>
@@ -178,7 +190,10 @@ function OptionsSection(props: {
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <Label className="text-xs text-muted-foreground">
-            Target Role <span className="opacity-60">(optional)</span>
+            {t("options.targetRole.label")}{" "}
+            <span className="opacity-60">
+              {t("options.targetRole.optional")}
+            </span>
           </Label>
           <Button
             type="button"
@@ -191,18 +206,18 @@ function OptionsSection(props: {
             {props.isAutofilling ? (
               <span className="flex items-center gap-1.5">
                 <Loader2 className="h-3 w-3 animate-spin" />
-                Detecting...
+                {t("options.targetRole.detecting")}
               </span>
             ) : (
               <span className="flex items-center gap-1.5">
                 <Sparkles className="h-3 w-3" />
-                Auto-detect
+                {t("options.targetRole.autoDetect")}
               </span>
             )}
           </Button>
         </div>
         <Input
-          placeholder="e.g. Senior Software Engineer"
+          placeholder={t("options.targetRole.placeholder")}
           value={props.targetRole}
           onChange={(e) => props.setTargetRole(e.target.value)}
           className="text-sm"
@@ -212,7 +227,7 @@ function OptionsSection(props: {
   );
 }
 
-function getErrorMessage(err: unknown): string {
+function getErrorMessage(err: unknown, fallback: string): string {
   if (err instanceof HttpError) {
     try {
       const data: unknown = JSON.parse(err.bodyText);
@@ -240,10 +255,11 @@ function getErrorMessage(err: unknown): string {
       : `HTTP ${err.status}`;
   }
   if (err instanceof Error) return err.message;
-  return "An unknown error occurred.";
+  return fallback;
 }
 
 export function GeneratorForm() {
+  const t = useTranslations("generatorForm");
   const pdfBlobUrlRef = useRef<string | null>(null);
 
   const [jobUrl, setJobUrl] = useState<string>("");
@@ -275,7 +291,7 @@ export function GeneratorForm() {
     if (jobUrl.trim().length === 0 && jobText.trim().length === 0) {
       setPreviewState({
         status: "error",
-        message: "Please provide either a Job URL or Job Text.",
+        message: t("errors.missingJobDetails"),
       });
       return;
     }
@@ -309,6 +325,7 @@ export function GeneratorForm() {
         body: JSON.stringify({
           letter: letterData.letter,
           date_line: letterData.date_line,
+          language,
         }),
       });
 
@@ -324,9 +341,13 @@ export function GeneratorForm() {
         pdfBlobUrl,
         pdfFilename: letterData.pdf_filename,
         docxFilename: letterData.docx_filename,
+        language,
       });
     } catch (err) {
-      setPreviewState({ status: "error", message: getErrorMessage(err) });
+      setPreviewState({
+        status: "error",
+        message: getErrorMessage(err, t("errors.unknown")),
+      });
     }
   }
 
@@ -340,6 +361,7 @@ export function GeneratorForm() {
         body: JSON.stringify({
           letter: previewState.letter,
           date_line: previewState.dateLine,
+          language: previewState.language,
         }),
       });
 
@@ -376,6 +398,7 @@ export function GeneratorForm() {
         body: JSON.stringify({
           letter: previewState.letter,
           date_line: previewState.dateLine,
+          language: previewState.language,
         }),
       });
       const docxBlob = await docxRes.blob();
@@ -407,7 +430,7 @@ export function GeneratorForm() {
     } catch (err) {
       setNotionSaveState({
         status: "error",
-        message: getErrorMessage(err),
+        message: getErrorMessage(err, t("errors.unknown")),
       });
     }
   }
@@ -417,14 +440,14 @@ export function GeneratorForm() {
     if (!url) {
       setAutofillState({
         status: "error",
-        message: "Please enter a Job URL first.",
+        message: t("errors.missingJobUrl"),
       });
       return;
     }
     if (jobText.trim().length > 0) {
       setAutofillState({
         status: "error",
-        message: "Job text is set – role will be derived from it.",
+        message: t("errors.jobTextOverrides"),
       });
       return;
     }
@@ -453,10 +476,13 @@ export function GeneratorForm() {
       }
       setAutofillState({
         status: "error",
-        message: "Could not detect role from URL.",
+        message: t("errors.roleDetectFailed"),
       });
     } catch (err) {
-      setAutofillState({ status: "error", message: getErrorMessage(err) });
+      setAutofillState({
+        status: "error",
+        message: getErrorMessage(err, t("errors.unknown")),
+      });
     }
   }
 
@@ -474,9 +500,11 @@ export function GeneratorForm() {
                 1
               </div>
               <div>
-                <CardTitle className="text-lg">Job Details</CardTitle>
+                <CardTitle className="text-lg">
+                  {t("steps.jobDetails.title")}
+                </CardTitle>
                 <CardDescription>
-                  Provide the job posting to tailor the letter.
+                  {t("steps.jobDetails.description")}
                 </CardDescription>
               </div>
             </div>
@@ -499,9 +527,11 @@ export function GeneratorForm() {
                 2
               </div>
               <div>
-                <CardTitle className="text-lg">Configuration</CardTitle>
+                <CardTitle className="text-lg">
+                  {t("steps.configuration.title")}
+                </CardTitle>
                 <CardDescription>
-                  Customize the output to match your style.
+                  {t("steps.configuration.description")}
                 </CardDescription>
               </div>
             </div>
@@ -538,26 +568,28 @@ export function GeneratorForm() {
               {isGenerating ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating...
+                  {t("actions.generating")}
                 </>
               ) : (
                 <>
                   <Sparkles className="mr-2 h-4 w-4" />
-                  Generate Cover Letter
+                  {t("actions.generate")}
                 </>
               )}
             </Button>
 
             {previewState.status === "idle" && (
               <p className="text-center text-xs text-muted-foreground">
-                Make sure you&apos;ve{" "}
-                <a
-                  href="/settings"
-                  className="text-primary underline underline-offset-4 hover:no-underline"
-                >
-                  uploaded your CV
-                </a>{" "}
-                first
+                {t.rich("hints.uploadCv", {
+                  link: (chunks) => (
+                    <a
+                      href="/settings"
+                      className="text-primary underline underline-offset-4 hover:no-underline"
+                    >
+                      {chunks}
+                    </a>
+                  ),
+                })}
               </p>
             )}
           </CardContent>
@@ -579,7 +611,7 @@ export function GeneratorForm() {
           <div className="flex items-center justify-between rounded-lg border border-green-500/50 bg-green-500/10 p-4">
             <div className="flex items-center gap-3 text-sm text-green-700">
               <Check className="h-4 w-4 shrink-0" />
-              <p>Saved to Notion successfully!</p>
+              <p>{t("notion.saved")}</p>
             </div>
             <a
               href={notionSaveState.notionPageUrl}
@@ -587,7 +619,7 @@ export function GeneratorForm() {
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-sm font-medium text-green-700 hover:underline"
             >
-              Open in Notion
+              {t("notion.open")}
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
           </div>
@@ -606,7 +638,7 @@ export function GeneratorForm() {
           <CardHeader className="border-b bg-muted/40 py-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <CardTitle className="text-lg">Preview</CardTitle>
+                <CardTitle className="text-lg">{t("preview.title")}</CardTitle>
                 {previewState.status === "done" && (
                   <Badge variant="secondary" className="font-normal">
                     {previewState.companyName}
@@ -628,7 +660,7 @@ export function GeneratorForm() {
                     {notionSaveState.status === "loading" ? (
                       <>
                         <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                        Saving...
+                        {t("notion.saving")}
                       </>
                     ) : (
                       <>
@@ -648,11 +680,10 @@ export function GeneratorForm() {
                 <FileText className="h-8 w-8 text-muted-foreground/40" />
               </div>
               <h3 className="mb-1 text-lg font-semibold">
-                Ready to generate
+                {t("preview.readyTitle")}
               </h3>
               <p className="max-w-xs text-center text-sm text-muted-foreground">
-                Fill in the job details on the left and click generate to create
-                your cover letter.
+                {t("preview.readyDescription")}
               </p>
             </CardContent>
           )}
@@ -664,10 +695,10 @@ export function GeneratorForm() {
                 <div className="absolute inset-0 h-12 w-12 animate-spin rounded-full border-2 border-primary border-t-transparent" />
               </div>
               <h3 className="mb-1 font-medium">
-                Generating your cover letter...
+              {t("preview.loadingTitle")}
               </h3>
               <p className="text-sm text-muted-foreground">
-                This may take a few seconds
+              {t("preview.loadingDescription")}
               </p>
             </CardContent>
           )}
@@ -677,7 +708,7 @@ export function GeneratorForm() {
               <iframe
                 src={`${previewState.pdfBlobUrl}#navpanes=0&view=FitH`}
                 className="h-[700px] w-full"
-                title="Cover letter preview"
+                title={t("preview.iframeTitle")}
               />
             </div>
           )}

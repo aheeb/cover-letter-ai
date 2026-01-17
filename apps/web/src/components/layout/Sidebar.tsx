@@ -11,6 +11,7 @@ import { CreditCard, FileText, Menu, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -22,20 +23,21 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 
 const navItems = [
   {
-    title: "Generate Letter",
+    titleKey: "generate",
     href: "/",
     icon: FileText,
   },
   {
-    title: "Settings",
+    titleKey: "settings",
     href: "/settings",
     icon: Settings,
   },
   {
-    title: "Pricing",
+    titleKey: "pricing",
     href: "/pricing",
     icon: CreditCard,
   },
@@ -47,7 +49,11 @@ function NavItem({
   onClick,
   onPrefetch,
 }: {
-  item: (typeof navItems)[0];
+  item: {
+    title: string;
+    href: string;
+    icon: typeof FileText;
+  };
   isActive: boolean;
   onClick?: () => void;
   onPrefetch?: () => void;
@@ -87,6 +93,14 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const router = useRouter();
   const [pendingPath, setPendingPath] = useState<string | null>(null);
   const { user } = useUser();
+  const tBrand = useTranslations("brand");
+  const tNav = useTranslations("nav");
+  const tActions = useTranslations("actions");
+
+  const resolvedNavItems = navItems.map(({ titleKey, ...item }) => ({
+    ...item,
+    title: tNav(titleKey),
+  }));
 
   useEffect(() => {
     navItems.forEach((item) => {
@@ -116,13 +130,13 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
           <FileText className="h-4 w-4 text-primary-foreground" />
         </div>
-        <span className="font-semibold tracking-tight">Cover Letter AI</span>
+        <span className="font-semibold tracking-tight">{tBrand("name")}</span>
       </div>
 
       {/* Navigation */}
       <ScrollArea className="flex-1 px-3 py-4">
         <nav className="flex flex-col gap-1">
-          {navItems.map((item) => (
+          {resolvedNavItems.map((item) => (
             <NavItem
               key={item.href}
               item={item}
@@ -137,7 +151,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       </ScrollArea>
 
       {/* User Section */}
-      <div className="mt-auto border-t p-4">
+      <div className="mt-auto border-t p-4 space-y-3">
+        <LanguageSwitcher selectClassName="h-9 w-full" className="w-full" />
         <SignedIn>
           <div className="flex items-center gap-3">
             <UserButton
@@ -161,7 +176,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <SignedOut>
           <SignInButton mode="modal">
             <Button variant="outline" className="w-full">
-              Sign in
+              {tActions("signIn")}
             </Button>
           </SignInButton>
         </SignedOut>
@@ -179,6 +194,7 @@ export function Sidebar() {
 }
 
 export function MobileNav() {
+  const tNav = useTranslations("nav");
   return (
     <Sheet>
       <SheetTrigger asChild>
@@ -186,14 +202,14 @@ export function MobileNav() {
           variant="ghost"
           size="icon"
           className="lg:hidden"
-          aria-label="Open menu"
+          aria-label={tNav("openMenuAria")}
         >
           <Menu className="h-5 w-5" />
         </Button>
       </SheetTrigger>
       <SheetContent side="left" className="w-64 p-0">
         <SheetHeader className="sr-only">
-          <SheetTitle>Navigation Menu</SheetTitle>
+          <SheetTitle>{tNav("navigationMenu")}</SheetTitle>
         </SheetHeader>
         <SidebarContent />
       </SheetContent>

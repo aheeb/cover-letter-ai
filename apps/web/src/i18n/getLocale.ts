@@ -11,13 +11,17 @@ function parseAcceptLanguage(headerValue: string): string[] {
     .map((part) => part.trim())
     .filter(Boolean)
     .map((part) => {
-      const [lang, qValue] = part.split(";").map((segment) => segment.trim());
+      const [lang = "", qValue] = part
+        .split(";")
+        .map((segment) => segment.trim());
+      if (!lang) return null;
       const q =
         qValue && qValue.startsWith("q=")
           ? Number.parseFloat(qValue.slice(2))
           : 1;
       return { lang, q: Number.isNaN(q) ? 1 : q };
     })
+    .filter((entry): entry is { lang: string; q: number } => Boolean(entry))
     .sort((a, b) => b.q - a.q)
     .map((entry) => entry.lang);
 }
@@ -35,14 +39,16 @@ function resolveLocaleFromHeader(headerValue: string | null): Locale | null {
 }
 
 export async function getLocale(): Promise<Locale> {
-  const cookieLocale = cookies().get("locale")?.value;
+  const cookieStore = await cookies();
+  const cookieLocale = cookieStore.get("locale")?.value;
   if (cookieLocale) {
     const normalized = normalizeLocale(cookieLocale);
     if (isLocale(normalized)) return normalized;
   }
 
+  const headerStore = await headers();
   const headerLocale = resolveLocaleFromHeader(
-    headers().get("accept-language")
+    headerStore.get("accept-language")
   );
   if (headerLocale) return headerLocale;
 

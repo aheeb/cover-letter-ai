@@ -26,8 +26,12 @@ function getPlanIdentifier(): string | null {
 async function isBypassUser(userId: string): Promise<boolean> {
   const client = await clerkClient();
   const user = await client.users.getUser(userId);
-  return user.emailAddresses.some(
-    (email) => email.emailAddress.toLowerCase() === "andri.heeb2002@gmail.com"
+  const bypassEmails = new Set([
+    "andri.heeb2002@gmail.com",
+    "cornelia@zeh-klartext.ch",
+  ]);
+  return user.emailAddresses.some((email) =>
+    bypassEmails.has(email.emailAddress.toLowerCase())
   );
 }
 

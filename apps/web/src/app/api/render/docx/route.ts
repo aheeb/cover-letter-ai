@@ -1,6 +1,7 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { formatSenderAddress, type SenderProfile } from "@/lib/sender";
+import { getPlanIdentifier, isFreeAccessUser } from "@/lib/access";
 import { getApiBaseUrl } from "@/lib/env";
 
 type ProfileMetadata = {
@@ -8,25 +9,6 @@ type ProfileMetadata = {
     sender?: Partial<SenderProfile>;
   };
 };
-
-function getPlanSlug(): string | null {
-  const planId = process.env.CLERK_BILLING_PLAN_ID?.trim();
-  if (planId && planId.length > 0) return planId;
-  const slug = process.env.CLERK_BILLING_PLAN_SLUG?.trim();
-  return slug && slug.length > 0 ? slug : null;
-}
-
-async function isBypassUser(userId: string): Promise<boolean> {
-  const client = await clerkClient();
-  const user = await client.users.getUser(userId);
-  const bypassEmails = new Set([
-    "andri.heeb2002@gmail.com",
-    "cornelia@zeh-klartext.ch",
-  ]);
-  return user.emailAddresses.some((email) =>
-    bypassEmails.has(email.emailAddress.toLowerCase())
-  );
-}
 
 function getInternalTokenHeader(): Record<string, string> {
   const token = process.env.INTERNAL_API_TOKEN?.trim();
@@ -67,9 +49,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const bypass = await isBypassUser(userId);
+  const bypass = await isFreeAccessUser(userId);
   if (!bypass) {
-    const planSlug = getPlanSlug();
+    const planSlug = getPlanIdentifier();
     if (!planSlug) {
       return NextResponse.json(
         { error: "Missing CLERK_BILLING_PLAN_ID or CLERK_BILLING_PLAN_SLUG" },

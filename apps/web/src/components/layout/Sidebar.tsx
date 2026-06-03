@@ -1,8 +1,6 @@
 "use client";
 
 import {
-  SignedIn,
-  SignedOut,
   SignInButton,
   UserButton,
   useUser,
@@ -92,7 +90,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const [pendingPath, setPendingPath] = useState<string | null>(null);
-  const { user } = useUser();
+  const { isSignedIn, user } = useUser();
   const tBrand = useTranslations("brand");
   const tNav = useTranslations("nav");
   const tActions = useTranslations("actions");
@@ -153,10 +151,9 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       {/* User Section */}
       <div className="mt-auto border-t p-4 space-y-3">
         <LanguageSwitcher selectClassName="h-9 w-full" className="w-full" />
-        <SignedIn>
+        {isSignedIn ? (
           <div className="flex items-center gap-3">
             <UserButton
-              afterSignOutUrl="/"
               appearance={{
                 elements: {
                   avatarBox: "h-9 w-9",
@@ -172,14 +169,13 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
               </p>
             </div>
           </div>
-        </SignedIn>
-        <SignedOut>
+        ) : (
           <SignInButton mode="modal">
             <Button variant="outline" className="w-full">
               {tActions("signIn")}
             </Button>
           </SignInButton>
-        </SignedOut>
+        )}
       </div>
     </div>
   );

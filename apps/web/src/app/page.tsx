@@ -1,8 +1,9 @@
 import { SignInButton, SignUpButton } from "@clerk/nextjs";
-import { auth, clerkClient } from "@clerk/nextjs/server";
+import { auth } from "@clerk/nextjs/server";
 import { AppLayout } from "@/components/layout";
 import { GeneratorForm } from "@/components/GeneratorForm";
 import { Button } from "@/components/ui/button";
+import { getPlanIdentifier, isFreeAccessUser } from "@/lib/access";
 import {
   Card,
   CardContent,
@@ -15,25 +16,6 @@ import { FileText, Upload, Sparkles, Download, ArrowRight, CheckCircle2 } from "
 import { getTranslations } from "next-intl/server";
 
 type Translator = Awaited<ReturnType<typeof getTranslations>>;
-
-function getPlanIdentifier(): string | null {
-  const planId = process.env.CLERK_BILLING_PLAN_ID?.trim();
-  if (planId && planId.length > 0) return planId;
-  const planSlug = process.env.CLERK_BILLING_PLAN_SLUG?.trim();
-  return planSlug && planSlug.length > 0 ? planSlug : null;
-}
-
-async function isBypassUser(userId: string): Promise<boolean> {
-  const client = await clerkClient();
-  const user = await client.users.getUser(userId);
-  const bypassEmails = new Set([
-    "andri.heeb2002@gmail.com",
-    "cornelia@zeh-klartext.ch",
-  ]);
-  return user.emailAddresses.some((email) =>
-    bypassEmails.has(email.emailAddress.toLowerCase())
-  );
-}
 
 function LandingPage({
   tLanding,
@@ -295,7 +277,7 @@ function GeneratorPage({ tGenerator }: { tGenerator: Translator }) {
 export default async function Page() {
   const { userId, has } = await auth();
   const planIdentifier = getPlanIdentifier();
-  const bypass = userId ? await isBypassUser(userId) : false;
+  const bypass = userId ? await isFreeAccessUser(userId) : false;
   const hasPlan = Boolean(planIdentifier && has({ plan: planIdentifier }));
   const hasAccess = Boolean(userId && (bypass || hasPlan));
 

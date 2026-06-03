@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { Sidebar, MobileNav } from "./Sidebar";
-import { SignedIn, SignedOut, SignInButton, SignUpButton } from "@clerk/nextjs";
+import { SignInButton, SignUpButton, useUser } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { FileText } from "lucide-react";
 import Link from "next/link";
@@ -33,6 +33,8 @@ function MobileHeader() {
 function LandingHeader() {
   const tBrand = useTranslations("brand");
   const tActions = useTranslations("actions");
+  const { isSignedIn } = useUser();
+
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4 sm:px-6">
@@ -44,21 +46,22 @@ function LandingHeader() {
         </Link>
         <div className="flex items-center gap-2">
           <LanguageSwitcher selectClassName="h-8 w-[130px]" />
-          <SignedOut>
-            <SignInButton mode="modal">
-              <Button variant="ghost" size="sm">
-                {tActions("signIn")}
-              </Button>
-            </SignInButton>
-            <SignUpButton mode="modal">
-              <Button size="sm">{tActions("getStarted")}</Button>
-            </SignUpButton>
-          </SignedOut>
-          <SignedIn>
+          {isSignedIn ? (
             <Button asChild size="sm">
               <Link href="/">{tActions("goToApp")}</Link>
             </Button>
-          </SignedIn>
+          ) : (
+            <>
+              <SignInButton mode="modal">
+                <Button variant="ghost" size="sm">
+                  {tActions("signIn")}
+                </Button>
+              </SignInButton>
+              <SignUpButton mode="modal">
+                <Button size="sm">{tActions("getStarted")}</Button>
+              </SignUpButton>
+            </>
+          )}
         </div>
       </div>
     </header>

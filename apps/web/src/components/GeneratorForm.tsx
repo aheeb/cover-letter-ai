@@ -11,9 +11,10 @@ import {
   Save,
   Sparkles,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import { useTranslations } from "next-intl";
 
+import { PdfPreview } from "@/components/PdfPreview";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -46,6 +47,7 @@ type PreviewState =
       dateLine: string;
       companyName: string;
       pdfBlobUrl: string;
+      previewBlobUrl: string | null;
       pdfFilename: string;
       docxFilename: string;
       language: Language;
@@ -56,6 +58,16 @@ type NotionSaveState =
   | { status: "loading" }
   | { status: "error"; message: string }
   | { status: "done"; notionPageUrl: string };
+
+function replaceTrackedObjectUrl(
+  ref: MutableRefObject<string | null>,
+  blob: Blob,
+): string {
+  if (ref.current) URL.revokeObjectURL(ref.current);
+  const nextUrl = URL.createObjectURL(blob);
+  ref.current = nextUrl;
+  return nextUrl;
+}
 
 function JobSection(props: {
   jobUrl: string;
@@ -261,6 +273,7 @@ function getErrorMessage(err: unknown, fallback: string): string {
 export function GeneratorForm() {
   const t = useTranslations("generatorForm");
   const pdfBlobUrlRef = useRef<string | null>(null);
+  const previewBlobUrlRef = useRef<string | null>(null);
 
   const [jobUrl, setJobUrl] = useState<string>("");
   const [jobText, setJobText] = useState<string>("");
@@ -284,6 +297,7 @@ export function GeneratorForm() {
   useEffect(() => {
     return () => {
       if (pdfBlobUrlRef.current) URL.revokeObjectURL(pdfBlobUrlRef.current);
+      if (previewBlobUrlRef.current) URL.revokeObjectURL(previewBlobUrlRef.current);
     };
   }, []);
 
@@ -299,6 +313,10 @@ export function GeneratorForm() {
     if (previewState.status === "done" && pdfBlobUrlRef.current) {
       URL.revokeObjectURL(pdfBlobUrlRef.current);
       pdfBlobUrlRef.current = null;
+    }
+    if (previewBlobUrlRef.current) {
+      URL.revokeObjectURL(previewBlobUrlRef.current);
+      previewBlobUrlRef.current = null;
     }
 
     setPreviewState({ status: "loading" });
@@ -330,8 +348,22 @@ export function GeneratorForm() {
       });
 
       const pdfBlob = await pdfRes.blob();
-      const pdfBlobUrl = URL.createObjectURL(pdfBlob);
-      pdfBlobUrlRef.current = pdfBlobUrl;
+      const pdfBlobUrl = replaceTrackedObjectUrl(pdfBlobUrlRef, pdfBlob);
+
+      let previewBlobUrl: string | null = null;
+      try {
+        const previewRes = await fetchOk("/api/render/pdf-preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/pdf" },
+          body: pdfBlob,
+        });
+        previewBlobUrl = replaceTrackedObjectUrl(
+          previewBlobUrlRef,
+          await previewRes.blob(),
+        );
+      } catch {
+        // The generated PDF remains available even if its optional preview fails.
+      }
 
       setPreviewState({
         status: "done",
@@ -339,6 +371,7 @@ export function GeneratorForm() {
         dateLine: letterData.date_line,
         companyName: letterData.company_name,
         pdfBlobUrl,
+        previewBlobUrl,
         pdfFilename: letterData.pdf_filename,
         docxFilename: letterData.docx_filename,
         language,
@@ -705,10 +738,13 @@ export function GeneratorForm() {
 
           {previewState.status === "done" && (
             <div className="overflow-hidden bg-white">
-              <iframe
-                src={`${previewState.pdfBlobUrl}#navpanes=0&view=FitH`}
-                className="h-[700px] w-full"
+              <PdfPreview
+                key={previewState.previewBlobUrl ?? previewState.pdfBlobUrl}
+                previewUrl={previewState.previewBlobUrl}
+                pdfUrl={previewState.pdfBlobUrl}
                 title={t("preview.iframeTitle")}
+                errorLabel={t("preview.pdfError")}
+                openLabel={t("preview.openPdf")}
               />
             </div>
           )}

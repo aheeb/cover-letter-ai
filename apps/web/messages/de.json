@@ -146,7 +146,9 @@
       "readyDescription": "Füllen Sie links die Jobdetails aus und klicken Sie auf Erstellen, um Ihr Anschreiben zu erzeugen.",
       "loadingTitle": "Ihr Anschreiben wird erstellt...",
       "loadingDescription": "Das kann ein paar Sekunden dauern",
-      "iframeTitle": "Anschreiben-Vorschau"
+      "iframeTitle": "Anschreiben-Vorschau",
+      "pdfError": "Die Vorschau konnte nicht angezeigt werden.",
+      "openPdf": "PDF öffnen"
     }
   },
   "settings": {

@@ -146,7 +146,9 @@
       "readyDescription": "Fill in the job details on the left and click generate to create your cover letter.",
       "loadingTitle": "Generating your cover letter...",
       "loadingDescription": "This may take a few seconds",
-      "iframeTitle": "Cover letter preview"
+      "iframeTitle": "Cover letter preview",
+      "pdfError": "The preview could not be displayed.",
+      "openPdf": "Open PDF"
     }
   },
   "settings": {

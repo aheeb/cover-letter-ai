@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import partial
 
 import anyio
-from fastapi import APIRouter
+from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
 
@@ -12,6 +12,7 @@ from app.logging import get_logger
 from app.models import LetterData, RenderRequest
 from app.services.docx_render import TemplateNotFoundError, render_letter_docx
 from app.services.pdf_render import PdfRenderError, render_letter_pdf
+from app.services.pdf_preview import PdfPreviewError, render_pdf_preview
 from app.settings import get_settings
 
 router = APIRouter()
@@ -88,4 +89,24 @@ async def render_pdf(request: RenderRequest) -> Response:
         media_type="application/pdf",
     )
 
+
+@router.post("/v1/render/pdf-preview")
+async def render_pdf_preview_image(pdf: UploadFile = File(...)) -> Response:
+    """Render the first page of an existing PDF as a browser-safe PNG preview."""
+    settings = get_settings()
+    if pdf.content_type != "application/pdf":
+        raise ApiError(code="pdf_invalid_type", message="pdf must be application/pdf.", status_code=400)
+
+    pdf_bytes = await pdf.read()
+    if not pdf_bytes:
+        raise ApiError(code="pdf_empty", message="PDF is empty.", status_code=400)
+    if len(pdf_bytes) > settings.max_cv_pdf_bytes:
+        raise ApiError(code="pdf_too_large", message="PDF is too large.", status_code=413)
+
+    try:
+        preview_bytes = await anyio.to_thread.run_sync(render_pdf_preview, pdf_bytes)
+    except PdfPreviewError as exc:
+        raise ApiError(code="pdf_preview_failed", message=str(exc), status_code=500) from exc
+
+    return Response(content=preview_bytes, media_type="image/png")
 

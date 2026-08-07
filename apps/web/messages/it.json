@@ -146,7 +146,9 @@
       "readyDescription": "Compila i dettagli dell'offerta a sinistra e fai clic su genera per creare la tua lettera.",
       "loadingTitle": "Generazione della tua lettera...",
       "loadingDescription": "Potrebbe richiedere alcuni secondi",
-      "iframeTitle": "Anteprima lettera"
+      "iframeTitle": "Anteprima lettera",
+      "pdfError": "Impossibile visualizzare l’anteprima.",
+      "openPdf": "Apri PDF"
     }
   },
   "settings": {

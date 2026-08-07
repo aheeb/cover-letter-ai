@@ -146,7 +146,9 @@
       "readyDescription": "Renseignez les détails du poste à gauche et cliquez sur générer pour créer votre lettre.",
       "loadingTitle": "Génération de votre lettre...",
       "loadingDescription": "Cela peut prendre quelques secondes",
-      "iframeTitle": "Aperçu de la lettre"
+      "iframeTitle": "Aperçu de la lettre",
+      "pdfError": "L’aperçu n’a pas pu être affiché.",
+      "openPdf": "Ouvrir le PDF"
     }
   },
   "settings": {

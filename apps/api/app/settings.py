@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -26,7 +27,10 @@ class Settings(BaseSettings):
 
     # LLM / OpenAI
     openai_api_key: str | None = Field(default=None)
-    openai_model: str = Field(default="gpt-5-mini")
+    openai_model: str = Field(default="gpt-5.6-luna")
+    openai_reasoning_effort: Literal["none", "low", "medium", "high", "xhigh", "max"] = Field(
+        default="medium"
+    )
 
     # Exa (web scraping)
     exa_api_key: str | None = Field(default=None)
@@ -85,5 +89,4 @@ class Settings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings.from_env()
-
 

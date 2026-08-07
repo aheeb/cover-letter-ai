@@ -1080,7 +1080,7 @@ def generate_letter(*, job_text: str, cv_text: str, options: GenerateOptions, is
         "  `gender` (`female|male|unknown`). Nur wenn KEIN Name genannt ist, setze `contact_person` auf null.\n"
     )
 
-    model = settings.openai_model or "gpt-5-mini"
+    model = settings.openai_model or "gpt-5.6-luna"
     # Removed max_completion_tokens limit - let OpenAI use its default (model's context limit)
     # This prevents "max_output_tokens" incomplete response errors
 
@@ -1159,6 +1159,7 @@ def generate_letter(*, job_text: str, cv_text: str, options: GenerateOptions, is
         request_params = {
             "model": model,
             "input": input_items,
+            "reasoning": {"effort": settings.openai_reasoning_effort},
             # max_output_tokens is not set - OpenAI will use its default (model's context limit)
             # This prevents incomplete responses due to token limits
         }
@@ -1383,5 +1384,4 @@ def generate_letter(*, job_text: str, cv_text: str, options: GenerateOptions, is
     except Exception as exc:  # noqa: BLE001
         logger.error(f"LLM generation failed: {exc}")
         raise LlmError(f"LLM generation failed: {exc}") from exc
-
 
